@@ -183,7 +183,6 @@ public func loadSessions() -> [Session] {
                 }
             }
         } else if state == "waiting" {
-            // A killed session can also be stuck in "waiting".
             stale = pidDead || (now - ts) > 14400
         } else {
             stale = (now - ts) > 14400
