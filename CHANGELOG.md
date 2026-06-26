@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.1.1] - 2026-06-26
+
+### Fixed
+- Release workflow now correctly uses CHANGELOG.md for release notes
+
 ## [1.1.0] - 2026-06-26
 
 ### Added

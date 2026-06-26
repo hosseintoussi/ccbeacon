@@ -1,6 +1,6 @@
 import Foundation
 
-public let appVersion = "1.1.0"
+public let appVersion = "1.1.1"
 
 // Dev if the binary isn't in a standard install location (Homebrew or /usr/local).
 public var isDevBuild: Bool {
