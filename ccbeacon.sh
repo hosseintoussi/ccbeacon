@@ -114,7 +114,6 @@ with open(lock_path, 'w') as lf:
 if state == 'done':
     from datetime import date
     input_t = output_t = cache_c = cache_r = 0
-    last_text = ''
     if transcript_path and os.path.exists(transcript_path):
         try:
             with open(transcript_path) as f:
@@ -127,12 +126,6 @@ if state == 'done':
                             output_t += u.get('output_tokens', 0)
                             cache_c  += u.get('cache_creation_input_tokens', 0)
                             cache_r  += u.get('cache_read_input_tokens', 0)
-                            content = e.get('message', {}).get('content', [])
-                            blocks = [content] if isinstance(content, str) else (content if isinstance(content, list) else [])
-                            for block in blocks:
-                                t = block if isinstance(block, str) else (block.get('text', '') if isinstance(block, dict) and block.get('type') == 'text' else '')
-                                if t.strip():
-                                    last_text = t.strip()
                     except Exception:
                         continue
         except Exception:
@@ -165,19 +158,6 @@ if state == 'done':
 
     with open('$DAILY_FILE', 'w') as f:
         json.dump(daily, f)
-
-    # If the last assistant message is a question, show as waiting (needs input)
-    if last_text.endswith('?'):
-        with open(lock_path, 'w') as lf:
-            fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
-            try:
-                with open(session_file) as f:
-                    current = json.load(f)
-                current['state'] = 'waiting'
-                with open(session_file, 'w') as f:
-                    json.dump(current, f)
-            except Exception:
-                pass
 " 2>/dev/null
 
 case "$state" in
