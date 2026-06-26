@@ -34,7 +34,7 @@ brew install ccbeacon
 ccbeacon &
 ```
 
-The hook script and `~/.claude/settings.json` entries are configured automatically during install. Just launch and go.
+The hook script, `~/.claude/settings.json` entries, and login launch are all configured automatically. ccbeacon starts immediately and on every login.
 
 ### Build from source
 
@@ -53,10 +53,31 @@ Then follow the [manual hook setup](#manual-hook-setup) steps below.
 
 ## Launch at login
 
-Open **System Settings → General → Login Items** and click **+** to add the ccbeacon binary.
+**Homebrew install:** handled automatically — a LaunchAgent is installed during `brew install` so ccbeacon starts on every login.
 
-- Homebrew install: `/opt/homebrew/bin/ccbeacon`
-- Built from source: wherever your `.build/release/ccbeacon` lives
+**Built from source:** add a LaunchAgent manually:
+
+```sh
+cat > ~/Library/LaunchAgents/com.hosseintoussi.ccbeacon.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hosseintoussi.ccbeacon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/path/to/.build/release/ccbeacon</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <false/>
+</dict>
+</plist>
+EOF
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hosseintoussi.ccbeacon.plist
+```
 
 ---
 
