@@ -77,8 +77,6 @@ The release workflow (`.github/workflows/release.yml`) will:
 - Extract the matching `## [X.Y.Z]` section from `CHANGELOG.md` and use it as the GitHub release body
 - Update the SHA256 in the Homebrew tap formula automatically
 
-**Prerequisite:** a `HOMEBREW_TAP_TOKEN` fine-grained PAT (scoped to `homebrew-ccbeacon`,
-`Contents: read and write`) must be set as an Actions secret in this repo.
 
 ## Homebrew tap
 
