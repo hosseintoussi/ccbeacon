@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.1] - 2026-06-26
+
+### Fixed
+- Session rows now show model, path, and token stats on separate lines — no more truncation
+- Daily stats row stacks token counts below the session count so the full string is visible
+
 ## [2.0.0] - 2026-06-26
 
 ### Added

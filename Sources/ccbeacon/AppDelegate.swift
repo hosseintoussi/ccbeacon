@@ -330,7 +330,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let isRunning = session.state == "working"
         let isIdle    = session.state == "idle"
         let hasTTY    = !session.tty.isEmpty
-        let h: CGFloat = 66
+        let h: CGFloat = 82
         let view: NSView
         if hasTTY {
             let cv = ClickableRowView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
@@ -372,13 +372,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let dir = session.dirName.isEmpty ? session.id : session.dirName
         let nameF = lf(dir, size: 12.5, weight: .semibold, color: .labelColor)
-        nameF.frame = NSRect(x: cx, y: h - 24, width: cw * 0.62, height: 16)
+        nameF.frame = NSRect(x: cx, y: h - 26, width: cw * 0.62, height: 16)
         view.addSubview(nameF)
 
         if hasTTY {
             let pillH: CGFloat = 17
             let pillW: CGFloat = 54
-            let pill = NSView(frame: NSRect(x: menuW - 14 - pillW, y: h - 24, width: pillW, height: pillH))
+            let pill = NSView(frame: NSRect(x: menuW - 14 - pillW, y: h - 26, width: pillW, height: pillH))
             pill.wantsLayer = true
             pill.layer?.cornerRadius = pillH / 2
             pill.layer?.borderWidth = 1
@@ -398,23 +398,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
             timeF.alignment = .right
-            timeF.frame = NSRect(x: cx + cw * 0.62, y: h - 24, width: cw * 0.38, height: 16)
+            timeF.frame = NSRect(x: cx + cw * 0.62, y: h - 26, width: cw * 0.38, height: 16)
             view.addSubview(timeF)
         }
 
         let modelStr = cleanModel(session.model)
         let pathStr  = session.cwd.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-        let mp = [modelStr, pathStr].filter { !$0.isEmpty }.joined(separator: " · ")
-        if !mp.isEmpty {
-            let mpF = lf(mp, size: 11, weight: .regular, color: .tertiaryLabelColor)
-            mpF.frame = NSRect(x: cx, y: h - 41, width: cw, height: 15)
-            view.addSubview(mpF)
+
+        if !modelStr.isEmpty {
+            let modelF = lf(modelStr, size: 11, weight: .regular, color: .tertiaryLabelColor)
+            modelF.frame = NSRect(x: cx, y: h - 43, width: cw, height: 15)
+            view.addSubview(modelF)
+        }
+
+        if !pathStr.isEmpty {
+            let pathF = lf(pathStr, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
+            pathF.frame = NSRect(x: cx, y: h - 58, width: cw, height: 14)
+            view.addSubview(pathF)
         }
 
         if session.totalTokens > 0 {
             let tok = "in \(fmtK(session.inputTokens)) · out \(fmtK(session.outputTokens)) · cache \(fmtK(session.cacheTokens))"
-            let tokF = lf(tok, size: 10.5, weight: .regular, color: .tertiaryLabelColor, mono: true)
-            tokF.frame = NSRect(x: cx, y: h - 57, width: cw, height: 14)
+            let tokF = lf(tok, size: 10, weight: .regular, color: .quaternaryLabelColor, mono: true)
+            tokF.frame = NSRect(x: cx, y: h - 73, width: cw, height: 14)
             view.addSubview(tokF)
         }
 
@@ -433,17 +439,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func dailyRow(_ d: DailyStats) -> NSMenuItem {
-        let h: CGFloat = 32
+        let h: CGFloat = 44
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
         let leftF = lf("Today · \(d.sessions) session\(d.sessions == 1 ? "" : "s")",
                        size: 11.5, weight: .regular, color: .secondaryLabelColor)
-        leftF.frame = NSRect(x: 14, y: 8, width: 150, height: 16)
+        leftF.frame = NSRect(x: 14, y: h - 22, width: menuW - 28, height: 16)
         view.addSubview(leftF)
         let tok = "in \(fmtK(d.inputTokens)) · out \(fmtK(d.outputTokens)) · cache \(fmtK(d.cacheTokens))"
-        let rightF = lf(tok, size: 10.5, weight: .regular, color: .tertiaryLabelColor, mono: true)
-        rightF.alignment = .right
-        rightF.frame = NSRect(x: 160, y: 8, width: menuW - 174, height: 16)
-        view.addSubview(rightF)
+        let tokF = lf(tok, size: 10.5, weight: .regular, color: .tertiaryLabelColor, mono: true)
+        tokF.frame = NSRect(x: 14, y: h - 38, width: menuW - 28, height: 15)
+        view.addSubview(tokF)
         let item = NSMenuItem(); item.view = view; return item
     }
 
