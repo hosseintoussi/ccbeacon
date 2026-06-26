@@ -375,7 +375,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         nameF.frame = NSRect(x: cx, y: h - 24, width: cw * 0.62, height: 16)
         view.addSubview(nameF)
 
-        if hasTTY && !isInput {
+        if hasTTY {
             let pillH: CGFloat = 17
             let pillW: CGFloat = 54
             let pill = NSView(frame: NSRect(x: menuW - 14 - pillW, y: h - 24, width: pillW, height: pillH))
@@ -383,7 +383,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pill.layer?.cornerRadius = pillH / 2
             pill.layer?.borderWidth = 1
             pill.layer?.borderColor = NSColor.systemBlue.cgColor
-            let label = lf("↗  open", size: 10, weight: .medium, color: .systemBlue)
+            let label = lf("open", size: 10, weight: .medium, color: .systemBlue)
             label.alignment = .center
             label.frame = NSRect(x: 0, y: 1, width: pillW, height: pillH - 2)
             pill.addSubview(label)
@@ -393,9 +393,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var rColor = NSColor.secondaryLabelColor
             var rMono  = true
             var rWeight = NSFont.Weight.regular
-            if isInput {
-                rText = "needs input"; rColor = .systemOrange; rMono = false; rWeight = .semibold
-            } else if isIdle {
+            if isIdle {
                 rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
             }
             let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
