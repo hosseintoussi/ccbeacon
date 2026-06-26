@@ -63,22 +63,22 @@ Add to `~/.claude/settings.json`:
 
 ## Releasing a new version
 
-1. Bump `appVersion` in `Sources/CCBeaconCore/Version.swift`
-2. Commit: `git commit -am "Bump to vX.Y.Z"`
-3. Tag and push:
+1. Add a `## [X.Y.Z] - YYYY-MM-DD` section at the top of `CHANGELOG.md`
+2. Bump `appVersion` in `Sources/CCBeaconCore/Version.swift`
+3. Commit and tag:
    ```sh
+   git commit -am "Bump to vX.Y.Z"
    git tag vX.Y.Z
    git push origin main vX.Y.Z
    ```
 
 The release workflow (`.github/workflows/release.yml`) will:
 - Build and test
-- Create a GitHub release with auto-generated notes
+- Extract the matching `## [X.Y.Z]` section from `CHANGELOG.md` and use it as the GitHub release body
 - Update the SHA256 in the Homebrew tap formula automatically
 
-**Prerequisite:** a `HOMEBREW_TAP_TOKEN` secret must be set in this repo's Actions secrets
-(see README for how to create it). Without it the last step of the release workflow fails,
-but the GitHub release and build still succeed.
+**Prerequisite:** a `HOMEBREW_TAP_TOKEN` fine-grained PAT (scoped to `homebrew-ccbeacon`,
+`Contents: read and write`) must be set as an Actions secret in this repo.
 
 ## Homebrew tap
 
