@@ -14,13 +14,13 @@ ccbeacon sits in your menu bar and watches all your active Claude Code sessions.
 
 | State | Menu bar |
 |-------|----------|
-| Idle | `✦` |
+| No active sessions | `✦` |
 | 1 session working | `⣾ 2:14` |
-| Multiple sessions | `⣾ 3 · 2:14` |
+| Multiple sessions working | `⣾ 3 sessions` |
 | Needs your input | `✦ 1` (amber, pulsing) |
 | Just finished | `✦ done` (green, 10s) |
 
-Click the icon to see a dropdown with per-session details: project name, model, elapsed time, and token usage.
+Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported).
 
 ---
 
@@ -107,9 +107,10 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
-    "Notification":     [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
+    "SessionStart":    [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh idle"    }] }],
+    "UserPromptSubmit":[{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
+    "Notification":    [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
+    "Stop":            [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
   }
 }
 ```
@@ -118,17 +119,22 @@ Add to `~/.claude/settings.json`:
 
 ## How it works
 
-The hook script (`ccbeacon.sh`) is called by Claude Code on three events:
+The hook script (`ccbeacon.sh`) is called by Claude Code on four events:
 
-| Hook | State written |
-|------|--------------|
-| `UserPromptSubmit` | `working` |
-| `Notification` | `waiting` |
-| `Stop` | `done` |
+| Hook | Matcher | State written |
+|------|---------|--------------|
+| `SessionStart` | — | `idle` |
+| `UserPromptSubmit` | — | `working` |
+| `Notification` | `permission_prompt` | `waiting` |
+| `Stop` | — | `done` |
 
-Each call writes a small JSON file to `~/.claude/cc-sessions/`. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
+Each call writes a small JSON file to `~/.claude/cc-sessions/` including the session's PID, TTY device, and terminal app. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
 
-A `flock`-based exclusive lock in the hook script prevents a race condition where a `Notification` hook firing mid-run could overwrite a `Stop` hook running at the same moment, which would otherwise cause false "needs input" notifications after a session has already finished.
+Sessions are kept alive as long as their Claude process is running (detected via `kill(pid, 0)`). When a session is closed, it disappears from the menu immediately — no stale entries.
+
+The `Notification` hook uses `matcher: "permission_prompt"` so only genuine tool-permission prompts trigger the amber "needs input" state — not recap messages or other idle notifications.
+
+A `flock`-based exclusive lock in the hook script prevents a race condition where a `Notification` hook firing mid-run could overwrite a `Stop` hook running at the same moment.
 
 ---
 
