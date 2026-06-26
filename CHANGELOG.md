@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0] - 2026-06-26
+
+### Added
+- **Terminal deep-link:** click any session row to jump directly to that terminal pane — works with iTerm2 and Terminal.app via AppleScript
+- **Pill-style "open" button** replaces elapsed time in session rows when a TTY is detected; hand cursor on hover signals it's clickable
+- **SessionStart hook** — fresh sessions appear immediately without needing to type first
+- **PID-based liveness detection** — sessions disappear instantly when their Claude process exits, no more stale entries lingering for minutes
+- **`idle` state** — sessions in `done` state with a live process are resolved to `idle` and stay visible; removed the moment the process exits
+- **Multi-session taskbar** — two or more active sessions shows "N sessions" instead of elapsed time
+- Hook detects terminal app (iTerm2 / Terminal.app) and per-pane TTY device by walking the process tree
+
+### Fixed
+- Sessions not disappearing after closing a terminal
+- Sessions stuck in "waiting" after tool approval (resolved via transcript mtime check)
+- False "input needed" notifications from recap messages (now uses `matcher: "permission_prompt"` on the Notification hook)
+- Green elapsed time color removed from session rows
+
 ## [1.1.2] - 2026-06-26
 
 ### Fixed
