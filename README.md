@@ -36,6 +36,14 @@ ccbeacon &
 
 The hook script, `~/.claude/settings.json` entries, and login launch are all configured automatically. ccbeacon starts immediately and on every login.
 
+### Update
+
+```sh
+brew update && brew upgrade ccbeacon
+```
+
+The new version installs and restarts automatically.
+
 ### Build from source
 
 Requires macOS 13+ and Swift (via Xcode or Command Line Tools).
