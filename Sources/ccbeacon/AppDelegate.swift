@@ -191,7 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         titleAttr.append(NSAttributedString(
             string: "  \(appVersion)",
             attributes: [.font: NSFont.systemFont(ofSize: 11),
-                         .foregroundColor: NSColor.tertiaryLabelColor]))
+                         .foregroundColor: NSColor.secondaryLabelColor]))
         if isDevBuild {
             titleAttr.append(NSAttributedString(
                 string: "  dev",
