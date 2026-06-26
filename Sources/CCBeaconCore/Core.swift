@@ -1,0 +1,202 @@
+import Foundation
+
+// MARK: - Paths
+
+public let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-sessions")
+public let dailyFile   = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-daily.json")
+
+// MARK: - Token cache
+
+private struct TokenSnapshot {
+    let input: Int, output: Int, cache: Int, model: String, mtime: Date
+}
+private var tokenCache: [String: TokenSnapshot] = [:]
+
+public func readTokens(_ transcriptPath: String) -> (input: Int, output: Int, cache: Int, model: String) {
+    guard !transcriptPath.isEmpty,
+          let attrs = try? FileManager.default.attributesOfItem(atPath: transcriptPath),
+          let mtime = attrs[.modificationDate] as? Date
+    else { return (0, 0, 0, "") }
+
+    if let c = tokenCache[transcriptPath], c.mtime == mtime {
+        return (c.input, c.output, c.cache, c.model)
+    }
+
+    var i = 0, o = 0, c = 0, model = ""
+    if let text = try? String(contentsOfFile: transcriptPath, encoding: .utf8) {
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let data  = line.data(using: .utf8),
+                  let entry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  (entry["type"] as? String) == "assistant",
+                  let msg   = entry["message"] as? [String: Any],
+                  let usage = msg["usage"]     as? [String: Any]
+            else { continue }
+            i += usage["input_tokens"]                 as? Int ?? 0
+            o += usage["output_tokens"]                as? Int ?? 0
+            c += (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                + (usage["cache_read_input_tokens"]    as? Int ?? 0)
+            if model.isEmpty { model = msg["model"] as? String ?? "" }
+        }
+    }
+
+    tokenCache[transcriptPath] = TokenSnapshot(input: i, output: o, cache: c, model: model, mtime: mtime)
+    return (input: i, output: o, cache: c, model: model)
+}
+
+// MARK: - Models
+
+public struct Session {
+    public let id: String
+    public let state: String
+    public let ts: TimeInterval
+    public let cwd: String
+    public let transcriptPath: String
+    public let totalTokens: Int
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let cacheTokens: Int
+    public let cost: Double
+    public let model: String
+
+    public init(id: String, state: String, ts: TimeInterval, cwd: String, transcriptPath: String,
+                totalTokens: Int, inputTokens: Int, outputTokens: Int, cacheTokens: Int,
+                cost: Double, model: String) {
+        self.id = id; self.state = state; self.ts = ts; self.cwd = cwd
+        self.transcriptPath = transcriptPath; self.totalTokens = totalTokens
+        self.inputTokens = inputTokens; self.outputTokens = outputTokens
+        self.cacheTokens = cacheTokens; self.cost = cost; self.model = model
+    }
+
+    public var elapsed: Int { max(0, Int(Date().timeIntervalSince1970 - ts)) }
+
+    public var dirName: String {
+        let last = URL(fileURLWithPath: cwd).lastPathComponent
+        return last.isEmpty ? cwd : last
+    }
+
+    public var priority: Int {
+        switch state {
+        case "waiting": return 3
+        case "working": return 2
+        case "done":    return 1
+        default:        return 0
+        }
+    }
+}
+
+public struct DailyStats {
+    public let totalTokens: Int
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let cacheTokens: Int
+    public let totalCost: Double
+    public let sessions: Int
+
+    public init(totalTokens: Int, inputTokens: Int, outputTokens: Int, cacheTokens: Int,
+                totalCost: Double, sessions: Int) {
+        self.totalTokens = totalTokens; self.inputTokens = inputTokens
+        self.outputTokens = outputTokens; self.cacheTokens = cacheTokens
+        self.totalCost = totalCost; self.sessions = sessions
+    }
+}
+
+// MARK: - Loading
+
+public func loadSessions() -> [Session] {
+    let fm  = FileManager.default
+    let now = Date().timeIntervalSince1970
+    guard let files = try? fm.contentsOfDirectory(atPath: sessionsDir) else { return [] }
+
+    return files.compactMap { file -> Session? in
+        guard file.hasSuffix(".json") else { return nil }
+        let path = (sessionsDir as NSString).appendingPathComponent(file)
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        let state          = json["state"]           as? String       ?? ""
+        let ts             = json["ts"]              as? TimeInterval ?? 0
+        let transcriptPath = json["transcript_path"] as? String       ?? ""
+
+        let stale: Bool
+        if state == "done" {
+            stale = (now - ts) > 14400
+        } else if state == "working" {
+            if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
+               let modified = attrs[.modificationDate] as? Date {
+                stale = (now - modified.timeIntervalSince1970) > 1800
+            } else {
+                stale = (now - ts) > 3600
+            }
+        } else {
+            stale = (now - ts) > 14400
+        }
+
+        if stale { try? fm.removeItem(atPath: path); return nil }
+
+        let tok = readTokens(transcriptPath)
+        return Session(
+            id:             json["session_id"]    as? String ?? file,
+            state:          state,
+            ts:             ts,
+            cwd:            json["cwd"]           as? String ?? "",
+            transcriptPath: transcriptPath,
+            totalTokens:    tok.input + tok.output + tok.cache,
+            inputTokens:    tok.input,
+            outputTokens:   tok.output,
+            cacheTokens:    tok.cache,
+            cost:           0,
+            model:          tok.model
+        )
+    }.sorted { $0.priority > $1.priority }
+}
+
+public func loadDailyStats() -> DailyStats? {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: dailyFile)),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else { return nil }
+
+    let today = _dateFmt.string(from: Date())
+    guard (json["date"] as? String) == today else { return nil }
+
+    return DailyStats(
+        totalTokens:  json["total_tokens"]  as? Int    ?? 0,
+        inputTokens:  json["input_tokens"]  as? Int    ?? 0,
+        outputTokens: json["output_tokens"] as? Int    ?? 0,
+        cacheTokens:  json["cache_tokens"]  as? Int    ?? 0,
+        totalCost:    json["total_cost"]    as? Double ?? 0,
+        sessions:     json["sessions"]      as? Int    ?? 0
+    )
+}
+
+// MARK: - Formatters
+
+private let _numFmt: NumberFormatter = {
+    let f = NumberFormatter(); f.numberStyle = .decimal; return f
+}()
+
+private let _dateFmt: DateFormatter = {
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
+}()
+
+public func fmtElapsed(_ s: Int) -> String {
+    if s < 60   { return "\(s)s" }
+    if s < 3600 { return "\(s / 60)m" }
+    return "\(s / 3600)h\((s % 3600) / 60)m"
+}
+
+public func fmtK(_ n: Int) -> String {
+    if n == 0        { return "0" }
+    if n < 1_000     { return "\(n)" }
+    if n < 1_000_000 { return String(format: "%.1fk", Double(n) / 1_000) }
+    return String(format: "%.2fM", Double(n) / 1_000_000)
+}
+
+public func fmtFull(_ n: Int) -> String { _numFmt.string(from: NSNumber(value: n)) ?? "\(n)" }
+
+public func fmtClock(_ s: Int) -> String {
+    if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
+    return String(format: "%d:%02d", s / 3600, (s % 3600) / 60)
+}
+
+public func cleanModel(_ m: String) -> String { m.hasPrefix("claude-") ? String(m.dropFirst(7)) : m }
