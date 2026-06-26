@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.2] - 2026-06-26
+
+### Fixed
+- Removed false "needs input" notifications triggered by any response ending with `?` — `waiting` state now only fires from the `Notification` hook with `matcher: permission_prompt`, which is the correct signal for Claude Code's option/question UI
+- Removed unused `asking` state and its purple UI (tint, stripe, `?` icon, "has question" notification)
+
 ## [2.0.1] - 2026-06-26
 
 ### Fixed
