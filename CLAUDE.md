@@ -72,10 +72,14 @@ Add to `~/.claude/settings.json`:
    git push origin main vX.Y.Z
    ```
 
-The release workflow (`.github/workflows/release.yml`) will:
-- Build and test
-- Extract the matching `## [X.Y.Z]` section from `CHANGELOG.md` and use it as the GitHub release body
-- Update the SHA256 in the Homebrew tap formula automatically
+The release workflow (`.github/workflows/release.yml`) is triggered automatically once CI
+passes on the pushed commit. It will:
+- Detect the version tag on that commit
+- Extract the matching `## [X.Y.Z]` section from `CHANGELOG.md` as the release body
+- Create the GitHub release
+- Update the SHA256 in the Homebrew tap formula
+
+**If CI fails, the release will not run.**
 
 
 ## Homebrew tap
