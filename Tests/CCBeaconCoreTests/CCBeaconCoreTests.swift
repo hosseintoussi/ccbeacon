@@ -74,13 +74,13 @@ suite("Session.priority") {
     }
     expect(s("waiting").priority, 3, "waiting = 3")
     expect(s("working").priority, 2, "working = 2")
-    expect(s("done").priority,    1, "done = 1")
+    expect(s("idle").priority,    1, "idle = 1")
     expect(s("other").priority,   0, "unknown = 0")
 
-    let sorted = [s("done"), s("waiting"), s("working")].sorted { $0.priority > $1.priority }
+    let sorted = [s("idle"), s("waiting"), s("working")].sorted { $0.priority > $1.priority }
     expect(sorted[0].state, "waiting", "sort: waiting first")
     expect(sorted[1].state, "working", "sort: working second")
-    expect(sorted[2].state, "done",    "sort: done last")
+    expect(sorted[2].state, "idle",    "sort: idle last")
 }
 
 suite("Session.dirName") {

@@ -32,6 +32,34 @@ session_id      = hook.get('session_id', 'default').replace('/', '_')
 cwd             = hook.get('cwd', '')
 transcript_path = hook.get('transcript_path', '')
 
+# Walk up the parent chain to find the Claude Code (node/claude) process PID.
+# Stored so the notifier can detect killed sessions via kill(pid, 0) instead of
+# waiting for the 30-minute transcript-mtime stale timeout.
+def _find_claude_pid():
+    import subprocess as _sp
+    pid = os.getppid()
+    seen = set()
+    for _ in range(8):
+        if pid <= 1 or pid in seen:
+            return 0
+        seen.add(pid)
+        try:
+            out = _sp.check_output(['ps', '-o', 'ppid=,comm=', '-p', str(pid)],
+                                   stderr=_sp.DEVNULL, text=True).strip()
+            if not out:
+                return 0
+            parts = out.split(None, 1)
+            ppid  = int(parts[0]) if parts else 0
+            comm  = (parts[1] if len(parts) > 1 else '').lower().strip()
+            if 'node' in comm or comm.startswith('claude'):
+                return pid
+            pid = ppid
+        except Exception:
+            return 0
+    return 0
+
+claude_pid = _find_claude_pid()
+
 # Minimal state file — token details are read directly from the transcript by the notifier app
 os.makedirs(sessions_dir, exist_ok=True)
 session_file = os.path.join(sessions_dir, f'{session_id}.json')
@@ -55,7 +83,8 @@ with open(lock_path, 'w') as lf:
     if not skip:
         with open(session_file, 'w') as f:
             json.dump({'state': state, 'ts': ts, 'session_id': session_id,
-                       'cwd': cwd, 'transcript_path': transcript_path}, f)
+                       'cwd': cwd, 'transcript_path': transcript_path,
+                       'claude_pid': claude_pid}, f)
 
 # Daily totals: parse transcript once at Stop to avoid doing it on every prompt
 if state == 'done':

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 // MARK: - Paths
 
@@ -78,7 +79,7 @@ public struct Session {
         switch state {
         case "waiting": return 3
         case "working": return 2
-        case "done":    return 1
+        case "idle":    return 1
         default:        return 0
         }
     }
@@ -114,20 +115,73 @@ public func loadSessions() -> [Session] {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
 
-        let state          = json["state"]           as? String       ?? ""
+        let rawState       = json["state"]           as? String       ?? ""
         let ts             = json["ts"]              as? TimeInterval ?? 0
         let transcriptPath = json["transcript_path"] as? String       ?? ""
 
+        // If the session is "waiting" but the transcript has been written to since
+        // the waiting state was set, Claude has resumed (e.g. after a tool approval
+        // that doesn't fire UserPromptSubmit). Use a 5-second buffer so the initial
+        // transcript write that triggered the Notification doesn't false-positive.
+        var state: String
+        if rawState == "waiting", !transcriptPath.isEmpty,
+           let attrs = try? fm.attributesOfItem(atPath: transcriptPath),
+           let mtime = attrs[.modificationDate] as? Date,
+           mtime.timeIntervalSince1970 > ts + 5.0 {
+            state = "working"
+        } else {
+            state = rawState
+        }
+
+        let storedPid = json["claude_pid"] as? Int ?? 0
+        // kill(pid, 0) returns ESRCH only when the process is truly gone (no permission needed).
+        let killResult = storedPid > 0 ? kill(pid_t(storedPid), 0) : 0
+        let killErrno  = errno
+        let pidDead    = storedPid > 0 && killResult != 0 && killErrno == ESRCH
+
+        // "done" means Claude finished its last response — the process may still be open.
+        // Resolve to "idle" when the PID is alive so open sessions stay visible.
+        if state == "done" && storedPid > 0 && !pidDead {
+            state = "idle"
+        }
+
         let stale: Bool
-        if state == "done" {
-            stale = (now - ts) > 14400
-        } else if state == "working" {
-            if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
-               let modified = attrs[.modificationDate] as? Date {
-                stale = (now - modified.timeIntervalSince1970) > 1800
+        if state == "idle" {
+            if pidDead {
+                stale = true
             } else {
-                stale = (now - ts) > 3600
+                stale = (now - ts) > 7200  // guard against PID reuse
             }
+        } else if state == "done" {
+            if storedPid > 0 {
+                stale = pidDead  // remove immediately when process exits
+            } else {
+                stale = (now - ts) > 30  // no PID stored — time-based fallback
+            }
+        } else if state == "working" {
+            if pidDead {
+                // Claude process is gone — killed session, remove immediately.
+                stale = true
+            } else if storedPid > 0 {
+                // PID is alive; use a long guard only against PID reuse.
+                if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
+                   let modified = attrs[.modificationDate] as? Date {
+                    stale = (now - modified.timeIntervalSince1970) > 7200
+                } else {
+                    stale = (now - ts) > 7200
+                }
+            } else {
+                // No PID stored (old session file) — fall back to transcript mtime.
+                if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
+                   let modified = attrs[.modificationDate] as? Date {
+                    stale = (now - modified.timeIntervalSince1970) > 600
+                } else {
+                    stale = (now - ts) > 1800
+                }
+            }
+        } else if state == "waiting" {
+            // A killed session can also be stuck in "waiting".
+            stale = pidDead || (now - ts) > 14400
         } else {
             stale = (now - ts) > 14400
         }

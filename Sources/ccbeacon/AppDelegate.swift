@@ -70,7 +70,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 pendingWaits[sid] = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
-            case "done" where prev == "working" || prev == "waiting":
+            case "idle" where prev == "working" || prev == "waiting":
                 pendingWaits[session.id]?.cancel(); pendingWaits.removeValue(forKey: session.id)
                 osxNotify("Claude finished", body: session.dirName, sound: "Glass")
             default:
@@ -99,7 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let waiting  = sessions.filter { $0.state == "waiting" }
         let working  = sessions.filter { $0.state == "working" }
-        let justDone = sessions.filter { $0.state == "done" && (now - $0.ts) < 10 }
+        let justDone = sessions.filter { $0.state == "idle" && (now - $0.ts) < 10 }
 
         let text: String
         let color: NSColor
@@ -109,9 +109,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             text  = "✦ \(waiting.count)"
             color = NSColor.systemOrange.withAlphaComponent(alpha)
         } else if !working.isEmpty {
-            let longest = working.max(by: { $0.elapsed < $1.elapsed })!
-            let prefix  = working.count > 1 ? "\(working.count) · " : ""
-            text  = "\(spinChars[spinTick]) \(prefix)\(fmtClock(longest.elapsed))"
+            if working.count > 1 {
+                text = "\(spinChars[spinTick]) \(working.count) sessions"
+            } else {
+                let longest = working.max(by: { $0.elapsed < $1.elapsed })!
+                text = "\(spinChars[spinTick]) \(fmtClock(longest.elapsed))"
+            }
             color = NSColor.white.withAlphaComponent(0.75)
         } else if !justDone.isEmpty {
             text  = "✦ done"
@@ -128,22 +131,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func buildMenu(_ sessions: [Session]) {
         let menu   = NSMenu()
-        let active = sessions.filter { $0.state != "done" }
-        let done   = sessions.filter { $0.state == "done" }
+        let active = sessions.filter { $0.state == "working" || $0.state == "waiting" }
+        let idle   = sessions.filter { $0.state == "idle" }
 
-        menu.addItem(headerItem(active: active, done: done))
+        menu.addItem(headerItem(active: active, idle: idle))
         menu.addItem(.separator())
 
-        if !active.isEmpty {
-            menu.addItem(sectionLabel("Active"))
-            for s in active { menu.addItem(sessionRow(s)) }
-        }
-        if !done.isEmpty {
-            if !active.isEmpty { menu.addItem(.separator()) }
-            menu.addItem(sectionLabel("Earlier today"))
-            for s in done { menu.addItem(sessionRow(s)) }
-        }
-        if active.isEmpty && done.isEmpty {
+        if !sessions.isEmpty {
+            for s in sessions { menu.addItem(sessionRow(s)) }
+        } else {
             menu.addItem(emptyRow())
         }
 
@@ -180,7 +176,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return f
     }
 
-    func headerItem(active: [Session], done: [Session]) -> NSMenuItem {
+    func headerItem(active: [Session], idle: [Session]) -> NSMenuItem {
         let h: CGFloat = 68
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
@@ -203,9 +199,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         titleF.frame = NSRect(x: 14, y: h - 28, width: menuW - 28, height: 17)
         view.addSubview(titleF)
 
-        let total = active.count + done.count
+        let total = active.count + idle.count
         if total > 0 {
-            let cntF = lf("\(total) active", size: 11, weight: .regular,
+            let cntF = lf("\(total) open", size: 11, weight: .regular,
                           color: .tertiaryLabelColor, mono: true)
             cntF.alignment = .right
             cntF.frame = NSRect(x: menuW - 90, y: h - 28, width: 76, height: 17)
@@ -214,7 +210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let running   = active.filter { $0.state == "working" }.count
         let waiting   = active.filter { $0.state == "waiting" }.count
-        let doneCount = done.count
+        let idleCount = idle.count
         let attr = NSMutableAttributedString()
         let bodyA: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11.5),
@@ -230,7 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if running   > 0 { appendDot(running,   "running",     .systemBlue) }
         if waiting   > 0 { appendDot(waiting,   "needs input", .systemOrange) }
-        if doneCount > 0 { appendDot(doneCount, "done",        .systemGreen) }
+        if idleCount > 0 { appendDot(idleCount, "idle",        .tertiaryLabelColor) }
 
         if attr.length > 0 {
             let sf = NSTextField(labelWithString: "")
@@ -258,7 +254,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func sessionRow(_ session: Session) -> NSMenuItem {
         let isInput   = session.state == "waiting"
         let isRunning = session.state == "working"
-        let isDone    = session.state == "done"
+        let isIdle    = session.state == "idle"
         let h: CGFloat = 66
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
@@ -282,9 +278,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let d = PulseDotView(size: iSz)
             d.frame = NSRect(x: iX, y: iCY - iSz/2, width: iSz, height: iSz)
             view.addSubview(d)
-        } else if isDone {
-            let circ = DoneCircleView(frame: NSRect(x: iX, y: iCY - iSz/2, width: iSz, height: iSz))
-            view.addSubview(circ)
+        } else if isIdle {
+            let dot = NSView(frame: NSRect(x: iX + 2, y: iCY - 4, width: 8, height: 8))
+            dot.wantsLayer = true
+            dot.layer?.cornerRadius = 4
+            dot.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
+            view.addSubview(dot)
         }
 
         let cx: CGFloat = 35; let cw: CGFloat = menuW - cx - 14
@@ -300,8 +299,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var rWeight = NSFont.Weight.regular
         if isInput {
             rText = "needs input"; rColor = .systemOrange; rMono = false; rWeight = .semibold
-        } else if isDone {
-            rText = "\(fmtElapsed(session.elapsed)) ago"; rColor = .systemGreen
+        } else if isIdle {
+            rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
         }
         let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
         timeF.alignment = .right
