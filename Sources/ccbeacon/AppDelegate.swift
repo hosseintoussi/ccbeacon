@@ -184,7 +184,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let h: CGFloat = 68
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
-        let titleF = lf("ccbeacon", size: 13, weight: .bold, color: .labelColor)
+        let titleAttr = NSMutableAttributedString(
+            string: "ccbeacon",
+            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
+                         .foregroundColor: NSColor.labelColor])
+        titleAttr.append(NSAttributedString(
+            string: "  \(appVersion)",
+            attributes: [.font: NSFont.systemFont(ofSize: 11),
+                         .foregroundColor: NSColor.tertiaryLabelColor]))
+        if isDevBuild {
+            titleAttr.append(NSAttributedString(
+                string: "  dev",
+                attributes: [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold),
+                             .foregroundColor: NSColor.systemOrange]))
+        }
+        let titleF = NSTextField(labelWithString: "")
+        titleF.attributedStringValue = titleAttr
         titleF.frame = NSRect(x: 14, y: h - 28, width: menuW - 28, height: 17)
         view.addSubview(titleF)
 
