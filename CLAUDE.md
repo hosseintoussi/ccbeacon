@@ -39,7 +39,10 @@ Tests cover: `fmtElapsed`, `fmtClock`, `fmtK`, `cleanModel`, `Session.priority`,
 
 ## Hook script setup (required to see sessions)
 
-The app reads state from `~/.claude/cc-sessions/`. The hook script writes it.
+**Homebrew install:** handled automatically by `post_install` — hook script copied to
+`~/.claude/hooks/ccbeacon.sh` and entries merged into `~/.claude/settings.json`.
+
+**Dev build:** do it manually:
 
 ```sh
 mkdir -p ~/.claude/hooks

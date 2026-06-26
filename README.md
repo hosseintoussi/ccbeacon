@@ -31,7 +31,10 @@ Click the icon to see a dropdown with per-session details: project name, model, 
 ```sh
 brew tap hosseintoussi/ccbeacon
 brew install ccbeacon
+ccbeacon &
 ```
+
+The hook script and `~/.claude/settings.json` entries are configured automatically during install. Just launch and go.
 
 ### Build from source
 
@@ -46,23 +49,23 @@ swift build -c release
 
 ---
 
-## Setup
+## Setup (Homebrew)
 
-ccbeacon works by receiving events from Claude Code's hook system. Two things need to be configured: the hook script and the hook settings.
+Homebrew handles everything automatically. After `brew install ccbeacon`, the hook script is installed to `~/.claude/hooks/` and the three hook entries are added to `~/.claude/settings.json`. Just launch:
+
+```sh
+ccbeacon &
+```
+
+To start at login: **System Settings → General → Login Items → add ccbeacon**.
+
+## Setup (built from source)
 
 ### 1. Install the hook script
 
-**If installed via Homebrew:**
 ```sh
 mkdir -p ~/.claude/hooks
-cp /opt/homebrew/opt/ccbeacon/libexec/ccbeacon.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/ccbeacon.sh
-```
-
-**If built from source:**
-```sh
-mkdir -p ~/.claude/hooks
-cp /path/to/ccbeacon/ccbeacon.sh ~/.claude/hooks/
+cp ccbeacon.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/ccbeacon.sh
 ```
 
@@ -80,25 +83,11 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-If you already have hooks configured, add the ccbeacon commands alongside your existing ones.
+### 3. Launch
 
-### 3. Launch ccbeacon
-
-**Homebrew install:** the binary is already on your PATH:
-```sh
-ccbeacon &
-```
-
-**Built from source:**
 ```sh
 .build/release/ccbeacon &
 ```
-
-You'll see `✦` appear in your menu bar.
-
-### 4. Launch at login (optional)
-
-Go to **System Settings → General → Login Items** and add the ccbeacon binary.
 
 ---
 
