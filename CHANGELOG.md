@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2] - 2026-06-26
+
+### Fixed
+- Dev badge incorrectly shown on Homebrew installs — now uses `Bundle.main.executablePath` instead of `argv[0]` for reliable install path detection
+- LaunchAgent installed automatically at login via `brew install`
+
 ## [1.1.1] - 2026-06-26
 
 ### Fixed
