@@ -9,16 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  test:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Build
         run: swift build -c release
-
       - name: Test
         run: swift run CCBeaconTests
+
+  release:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Extract changelog for this version
         id: changelog
@@ -38,14 +42,13 @@ jobs:
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
           TARBALL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
           SHA256=$(curl -sL "$TARBALL" | shasum -a 256 | awk '{print $1}')
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/hosseintoussi/homebrew-ccbeacon.git" /tmp/tap
           cd /tmp/tap
 
-          sed -i '' "s|url \".*\"|url \"${TARBALL}\"|"   Formula/ccbeacon.rb
+          sed -i '' "s|url \".*\"|url \"${TARBALL}\"|"     Formula/ccbeacon.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/ccbeacon.rb
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
