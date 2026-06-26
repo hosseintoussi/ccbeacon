@@ -58,14 +58,17 @@ public struct Session {
     public let cacheTokens: Int
     public let cost: Double
     public let model: String
+    public let tty: String
+    public let terminal: String
 
     public init(id: String, state: String, ts: TimeInterval, cwd: String, transcriptPath: String,
                 totalTokens: Int, inputTokens: Int, outputTokens: Int, cacheTokens: Int,
-                cost: Double, model: String) {
+                cost: Double, model: String, tty: String = "", terminal: String = "") {
         self.id = id; self.state = state; self.ts = ts; self.cwd = cwd
         self.transcriptPath = transcriptPath; self.totalTokens = totalTokens
         self.inputTokens = inputTokens; self.outputTokens = outputTokens
         self.cacheTokens = cacheTokens; self.cost = cost; self.model = model
+        self.tty = tty; self.terminal = terminal
     }
 
     public var elapsed: Int { max(0, Int(Date().timeIntervalSince1970 - ts)) }
@@ -200,7 +203,9 @@ public func loadSessions() -> [Session] {
             outputTokens:   tok.output,
             cacheTokens:    tok.cache,
             cost:           0,
-            model:          tok.model
+            model:          tok.model,
+            tty:            json["tty"]           as? String ?? "",
+            terminal:       json["terminal"]      as? String ?? ""
         )
     }.sorted { $0.priority > $1.priority }
 }

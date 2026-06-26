@@ -32,33 +32,47 @@ session_id      = hook.get('session_id', 'default').replace('/', '_')
 cwd             = hook.get('cwd', '')
 transcript_path = hook.get('transcript_path', '')
 
-# Walk up the parent chain to find the Claude Code (node/claude) process PID.
-# Stored so the notifier can detect killed sessions via kill(pid, 0) instead of
-# waiting for the 30-minute transcript-mtime stale timeout.
-def _find_claude_pid():
+# Walk the process tree to find the Claude PID, hosting terminal app, and TTY device.
+# TTY is read from 'ps -o tty=' for the Claude process — avoids relying on the hook's
+# own fds, which are all redirected (stdin piped, stderr to /dev/null).
+def _find_session_info():
     import subprocess as _sp
     pid = os.getppid()
     seen = set()
-    for _ in range(8):
+    claude_pid = 0
+    terminal = ''
+    tty_device = ''
+    for _ in range(12):
         if pid <= 1 or pid in seen:
-            return 0
+            break
         seen.add(pid)
         try:
-            out = _sp.check_output(['ps', '-o', 'ppid=,comm=', '-p', str(pid)],
+            out = _sp.check_output(['ps', '-o', 'ppid=,tty=,comm=', '-p', str(pid)],
                                    stderr=_sp.DEVNULL, text=True).strip()
             if not out:
-                return 0
-            parts = out.split(None, 1)
+                break
+            parts = out.split(None, 2)
             ppid  = int(parts[0]) if parts else 0
-            comm  = (parts[1] if len(parts) > 1 else '').lower().strip()
-            if 'node' in comm or comm.startswith('claude'):
-                return pid
+            tty   = parts[1] if len(parts) > 1 else ''
+            comm  = (parts[2] if len(parts) > 2 else '').lower().strip()
+            if not claude_pid and ('node' in comm or comm.startswith('claude')):
+                claude_pid = pid
+                if tty and tty != '??':
+                    if tty.startswith('/dev/'):
+                        tty_device = tty
+                    elif tty.startswith('ttys'):
+                        tty_device = '/dev/' + tty
+                    else:
+                        tty_device = '/dev/tty' + tty
+            if not terminal:
+                if 'iterm2' in comm:     terminal = 'iTerm2'
+                elif comm == 'terminal': terminal = 'Terminal'
             pid = ppid
         except Exception:
-            return 0
-    return 0
+            break
+    return claude_pid, terminal, tty_device
 
-claude_pid = _find_claude_pid()
+claude_pid, terminal_app, tty_device = _find_session_info()
 
 # Minimal state file — token details are read directly from the transcript by the notifier app
 os.makedirs(sessions_dir, exist_ok=True)
@@ -71,20 +85,30 @@ with open(lock_path, 'w') as lf:
     fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
 
     skip = False
+    prev_state = ''
+    try:
+        with open(session_file) as f:
+            prev = json.load(f)
+            prev_state = prev.get('state', '')
+            if claude_pid == 0:       claude_pid    = prev.get('claude_pid', 0)
+            if not tty_device:        tty_device    = prev.get('tty', '')
+            if not terminal_app:      terminal_app  = prev.get('terminal', '')
+    except Exception:
+        pass
+
     if state == 'waiting':
-        try:
-            with open(session_file) as f:
-                prev = json.load(f)
-            if prev.get('state') == 'done':
-                skip = True
-        except Exception:
-            pass
+        if prev_state == 'done':
+            skip = True
+    elif state == 'idle':
+        if prev_state in ('working', 'waiting'):
+            skip = True
 
     if not skip:
         with open(session_file, 'w') as f:
             json.dump({'state': state, 'ts': ts, 'session_id': session_id,
                        'cwd': cwd, 'transcript_path': transcript_path,
-                       'claude_pid': claude_pid}, f)
+                       'claude_pid': claude_pid, 'tty': tty_device,
+                       'terminal': terminal_app}, f)
 
 # Daily totals: parse transcript once at Stop to avoid doing it on every prompt
 if state == 'done':

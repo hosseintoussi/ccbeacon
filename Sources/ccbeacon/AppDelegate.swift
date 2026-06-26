@@ -1,6 +1,28 @@
 import Cocoa
 import CCBeaconCore
 
+private final class ClickableRowView: NSView {
+    var onClick: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { NSCursor.pointingHand.push() }
+    override func mouseExited(with event: NSEvent)  { NSCursor.pop() }
+
+    override func mouseDown(with event: NSEvent) {
+        NSCursor.pop()
+        onClick?()
+        enclosingMenuItem?.menu?.cancelTracking()
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
@@ -251,12 +273,72 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem(); item.view = view; return item
     }
 
+    func focusTerminalSession(tty: String, terminal: String) {
+        let app: String
+        if !terminal.isEmpty {
+            app = terminal
+        } else if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2").isEmpty {
+            app = "iTerm2"
+        } else {
+            app = "Terminal"
+        }
+
+        let script: String
+        switch app {
+        case "iTerm2":
+            script = """
+            tell application \"iTerm2\"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        repeat with s in sessions of t
+                            if tty of s is \"\(tty)\" then
+                                activate
+                                select w
+                                tell t to select
+                                tell s to select
+                                return
+                            end if
+                        end repeat
+                    end repeat
+                end repeat
+            end tell
+            """
+        default:
+            script = """
+            tell application \"Terminal\"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is \"\(tty)\" then
+                            activate
+                            set selected tab of w to t
+                            return
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            """
+        }
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        proc.arguments = ["-e", script]
+        try? proc.run()
+    }
+
     func sessionRow(_ session: Session) -> NSMenuItem {
         let isInput   = session.state == "waiting"
         let isRunning = session.state == "working"
         let isIdle    = session.state == "idle"
+        let hasTTY    = !session.tty.isEmpty
         let h: CGFloat = 66
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
+        let view: NSView
+        if hasTTY {
+            let cv = ClickableRowView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
+            cv.onClick = { [weak self] in self?.focusTerminalSession(tty: session.tty, terminal: session.terminal) }
+            view = cv
+        } else {
+            view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
+        }
 
         if isInput {
             let tint = NSView(frame: view.bounds)
@@ -293,19 +375,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         nameF.frame = NSRect(x: cx, y: h - 24, width: cw * 0.62, height: 16)
         view.addSubview(nameF)
 
-        var rText = fmtElapsed(session.elapsed)
-        var rColor = NSColor.secondaryLabelColor
-        var rMono = true
-        var rWeight = NSFont.Weight.regular
-        if isInput {
-            rText = "needs input"; rColor = .systemOrange; rMono = false; rWeight = .semibold
-        } else if isIdle {
-            rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
+        if hasTTY && !isInput {
+            let pillH: CGFloat = 17
+            let pillW: CGFloat = 54
+            let pill = NSView(frame: NSRect(x: menuW - 14 - pillW, y: h - 24, width: pillW, height: pillH))
+            pill.wantsLayer = true
+            pill.layer?.cornerRadius = pillH / 2
+            pill.layer?.borderWidth = 1
+            pill.layer?.borderColor = NSColor.systemBlue.cgColor
+            let label = lf("↗  open", size: 10, weight: .medium, color: .systemBlue)
+            label.alignment = .center
+            label.frame = NSRect(x: 0, y: 1, width: pillW, height: pillH - 2)
+            pill.addSubview(label)
+            view.addSubview(pill)
+        } else {
+            var rText = fmtElapsed(session.elapsed)
+            var rColor = NSColor.secondaryLabelColor
+            var rMono  = true
+            var rWeight = NSFont.Weight.regular
+            if isInput {
+                rText = "needs input"; rColor = .systemOrange; rMono = false; rWeight = .semibold
+            } else if isIdle {
+                rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
+            }
+            let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
+            timeF.alignment = .right
+            timeF.frame = NSRect(x: cx + cw * 0.62, y: h - 24, width: cw * 0.38, height: 16)
+            view.addSubview(timeF)
         }
-        let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
-        timeF.alignment = .right
-        timeF.frame = NSRect(x: cx + cw * 0.62, y: h - 24, width: cw * 0.38, height: 16)
-        view.addSubview(timeF)
 
         let modelStr = cleanModel(session.model)
         let pathStr  = session.cwd.replacingOccurrences(of: NSHomeDirectory(), with: "~")
@@ -323,7 +420,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             view.addSubview(tokF)
         }
 
-        let item = NSMenuItem(); item.view = view; return item
+        let item = NSMenuItem()
+        item.view = view
+        return item
     }
 
     func emptyRow() -> NSMenuItem {
