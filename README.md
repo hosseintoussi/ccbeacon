@@ -44,22 +44,25 @@ Requires macOS 13+ and Swift (via Xcode or Command Line Tools).
 git clone https://github.com/hosseintoussi/ccbeacon.git
 cd ccbeacon
 swift build -c release
-# binary is at .build/release/ccbeacon
+.build/release/ccbeacon &
 ```
+
+Then follow the [manual hook setup](#manual-hook-setup) steps below.
 
 ---
 
-## Setup (Homebrew)
+## Launch at login
 
-Homebrew handles everything automatically. After `brew install ccbeacon`, the hook script is installed to `~/.claude/hooks/` and the three hook entries are added to `~/.claude/settings.json`. Just launch:
+Open **System Settings → General → Login Items** and click **+** to add the ccbeacon binary.
 
-```sh
-ccbeacon &
-```
+- Homebrew install: `/opt/homebrew/bin/ccbeacon`
+- Built from source: wherever your `.build/release/ccbeacon` lives
 
-To start at login: **System Settings → General → Login Items → add ccbeacon**.
+---
 
-## Setup (built from source)
+## Manual hook setup
+
+Only needed if you built from source. Homebrew handles this automatically.
 
 ### 1. Install the hook script
 
@@ -83,12 +86,6 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-### 3. Launch
-
-```sh
-.build/release/ccbeacon &
-```
-
 ---
 
 ## How it works
@@ -104,32 +101,6 @@ The hook script (`ccbeacon.sh`) is called by Claude Code on three events:
 Each call writes a small JSON file to `~/.claude/cc-sessions/`. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
 
 A `flock`-based exclusive lock in the hook script prevents a race condition where a `Notification` hook firing mid-run could overwrite a `Stop` hook running at the same moment, which would otherwise cause false "needs input" notifications after a session has already finished.
-
----
-
-## Development
-
-```sh
-git clone https://github.com/hosseintoussi/ccbeacon.git
-cd ccbeacon
-swift build -c release          # build
-swift run CCBeaconTests         # run tests
-.build/release/ccbeacon &       # run (shows as dev build in menu)
-```
-
-### Releasing a new version
-
-1. Bump `appVersion` in `Sources/CCBeaconCore/Version.swift`
-2. Commit and push
-3. Tag and push the tag:
-   ```sh
-   git tag v1.x.x
-   git push origin v1.x.x
-   ```
-
-The release workflow will automatically create a GitHub release and update the Homebrew formula.
-
-> **Note:** The release workflow requires a `HOMEBREW_TAP_TOKEN` secret — a GitHub personal access token with `repo` scope and write access to the `homebrew-ccbeacon` repository. Add it at **Settings → Secrets and variables → Actions** in this repo.
 
 ---
 
