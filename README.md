@@ -40,9 +40,8 @@ The hook script, `~/.claude/settings.json` entries, and login launch are all con
 
 ```sh
 brew update && brew upgrade ccbeacon
+pkill ccbeacon; ccbeacon &
 ```
-
-The new version installs and restarts automatically.
 
 ### Build from source
 
