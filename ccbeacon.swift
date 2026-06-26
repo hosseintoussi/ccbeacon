@@ -462,7 +462,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let h: CGFloat = 68
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
-        let titleF = lf("claude-notifier", size: 13, weight: .bold, color: .labelColor)
+        let titleF = lf("ccbeacon", size: 13, weight: .bold, color: .labelColor)
         titleF.frame = NSRect(x: 14, y: h - 28, width: menuW - 28, height: 17)
         view.addSubview(titleF)
 
