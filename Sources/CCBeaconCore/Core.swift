@@ -150,10 +150,10 @@ public func loadSessions() -> [Session] {
 
         let stale: Bool
         if state == "idle" {
-            if pidDead {
-                stale = true
+            if storedPid > 0 {
+                stale = pidDead  // trust PID; file deleted immediately when PID dies
             } else {
-                stale = (now - ts) > 7200  // guard against PID reuse
+                stale = (now - ts) > 7200  // no PID stored — time-based fallback
             }
         } else if state == "done" {
             if storedPid > 0 {
@@ -166,13 +166,8 @@ public func loadSessions() -> [Session] {
                 // Claude process is gone — killed session, remove immediately.
                 stale = true
             } else if storedPid > 0 {
-                // PID is alive; use a long guard only against PID reuse.
-                if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
-                   let modified = attrs[.modificationDate] as? Date {
-                    stale = (now - modified.timeIntervalSince1970) > 7200
-                } else {
-                    stale = (now - ts) > 7200
-                }
+                // PID is alive — trust it regardless of time.
+                stale = false
             } else {
                 // No PID stored (old session file) — fall back to transcript mtime.
                 if let attrs    = try? fm.attributesOfItem(atPath: transcriptPath),
