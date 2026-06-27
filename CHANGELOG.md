@@ -6,10 +6,14 @@
 - Daily stats row now reads from Claude Code's own `~/.claude/stats-cache.json` and shows sessions, messages, and tool calls for today — no more homegrown token accounting
 - Removed token-counting transcript parsing from the Stop hook; hook script is significantly simpler
 
+### Fixed
+- Sessions no longer disappear after 2 hours of being idle — sessions persist as long as their Claude process is running, regardless of idle time
+- Added `elicitation_dialog` as a second `Notification` hook matcher so Claude's option/question UI (AskUserQuestion) correctly triggers the "needs input" state
+
 ## [2.0.2] - 2026-06-26
 
 ### Fixed
-- Removed false "needs input" notifications triggered by any response ending with `?` — `waiting` state now only fires from the `Notification` hook with `matcher: permission_prompt`, which is the correct signal for Claude Code's option/question UI
+- Removed false "needs input" notifications triggered by any response ending with `?` — `waiting` state now only fires from Claude Code's structured notification events
 - Removed unused `asking` state and its purple UI (tint, stripe, `?` icon, "has question" notification)
 
 ## [2.0.1] - 2026-06-26
