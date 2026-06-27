@@ -20,7 +20,7 @@ ccbeacon sits in your menu bar and watches all your active Claude Code sessions.
 | Needs your input | `✦ 1` (amber, pulsing) |
 | Just finished | `✦ done` (green, 10s) |
 
-Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported). A summary row at the bottom shows today's session count, messages, and tool calls pulled from Claude Code's own stats.
+Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported). An **Activity** row at the bottom shows the most recent day's session count, messages, and tool calls — pulled from Claude Code's own `stats-cache.json`, no extra tracking needed.
 
 ---
 

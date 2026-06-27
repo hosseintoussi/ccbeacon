@@ -89,14 +89,12 @@ public struct Session {
 }
 
 public struct DailyStats {
-    public let label: String
     public let sessions: Int
     public let messages: Int
     public let toolCalls: Int
 
-    public init(label: String, sessions: Int, messages: Int, toolCalls: Int) {
-        self.label = label; self.sessions = sessions
-        self.messages = messages; self.toolCalls = toolCalls
+    public init(sessions: Int, messages: Int, toolCalls: Int) {
+        self.sessions = sessions; self.messages = messages; self.toolCalls = toolCalls
     }
 }
 
@@ -207,18 +205,7 @@ public func loadDailyStats() -> DailyStats? {
           let entry = activity.last
     else { return nil }
 
-    let entryDate = entry["date"] as? String ?? ""
-    let today     = _dateFmt.string(from: Date())
-    let yesterday = _dateFmt.string(from: Date(timeIntervalSinceNow: -86400))
-    let label: String
-    if entryDate == today           { label = "Today" }
-    else if entryDate == yesterday  { label = "Yesterday" }
-    else if let d = _dateFmt.date(from: entryDate) {
-        let f = DateFormatter(); f.dateFormat = "MMM d"; label = f.string(from: d)
-    } else { label = entryDate }
-
     return DailyStats(
-        label:     label,
         sessions:  entry["sessionCount"]  as? Int ?? 0,
         messages:  entry["messageCount"]  as? Int ?? 0,
         toolCalls: entry["toolCallCount"] as? Int ?? 0
@@ -228,7 +215,8 @@ public func loadDailyStats() -> DailyStats? {
 // MARK: - Formatters
 
 private let _numFmt: NumberFormatter = {
-    let f = NumberFormatter(); f.numberStyle = .decimal; return f
+    let f = NumberFormatter(); f.numberStyle = .decimal
+    f.locale = Locale(identifier: "en_US"); return f
 }()
 
 private let _dateFmt: DateFormatter = {
@@ -256,3 +244,14 @@ public func fmtClock(_ s: Int) -> String {
 }
 
 public func cleanModel(_ m: String) -> String { m.hasPrefix("claude-") ? String(m.dropFirst(7)) : m }
+
+public func dailyLabel(for dateString: String, relativeTo now: Date = Date()) -> String {
+    let today     = _dateFmt.string(from: now)
+    let yesterday = _dateFmt.string(from: now.addingTimeInterval(-86400))
+    if dateString == today          { return "Today" }
+    if dateString == yesterday      { return "Yesterday" }
+    if let d = _dateFmt.date(from: dateString) {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
+    }
+    return dateString
+}

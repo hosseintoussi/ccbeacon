@@ -199,7 +199,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func headerItem(active: [Session], idle: [Session]) -> NSMenuItem {
-        let h: CGFloat = 68
+        let h: CGFloat = 64
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
         let titleAttr = NSMutableAttributedString(
@@ -218,7 +218,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let titleF = NSTextField(labelWithString: "")
         titleF.attributedStringValue = titleAttr
-        titleF.frame = NSRect(x: 14, y: h - 28, width: menuW - 28, height: 17)
+        titleF.frame = NSRect(x: 14, y: h - 26, width: menuW - 28, height: 17)
         view.addSubview(titleF)
 
         let total = active.count + idle.count
@@ -226,7 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let cntF = lf("\(total) open", size: 11, weight: .regular,
                           color: .tertiaryLabelColor, mono: true)
             cntF.alignment = .right
-            cntF.frame = NSRect(x: menuW - 90, y: h - 28, width: 76, height: 17)
+            cntF.frame = NSRect(x: menuW - 90, y: h - 26, width: 76, height: 17)
             view.addSubview(cntF)
         }
 
@@ -253,11 +253,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if attr.length > 0 {
             let sf = NSTextField(labelWithString: "")
             sf.attributedStringValue = attr
-            sf.frame = NSRect(x: 14, y: 10, width: menuW - 28, height: 16)
+            sf.frame = NSRect(x: 14, y: 12, width: menuW - 28, height: 16)
             view.addSubview(sf)
         } else {
             let ef = lf("No sessions", size: 11.5, weight: .regular, color: .tertiaryLabelColor)
-            ef.frame = NSRect(x: 14, y: 10, width: menuW - 28, height: 16)
+            ef.frame = NSRect(x: 14, y: 12, width: menuW - 28, height: 16)
             view.addSubview(ef)
         }
 
@@ -330,7 +330,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let isRunning = session.state == "working"
         let isIdle    = session.state == "idle"
         let hasTTY    = !session.tty.isEmpty
-        let h: CGFloat = 82
+        let h: CGFloat = 88
         let view: NSView
         if hasTTY {
             let cv = ClickableRowView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
@@ -407,20 +407,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if !modelStr.isEmpty {
             let modelF = lf(modelStr, size: 11, weight: .regular, color: .tertiaryLabelColor)
-            modelF.frame = NSRect(x: cx, y: h - 43, width: cw, height: 15)
+            modelF.frame = NSRect(x: cx, y: 44, width: cw, height: 14)
             view.addSubview(modelF)
         }
 
         if !pathStr.isEmpty {
             let pathF = lf(pathStr, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
-            pathF.frame = NSRect(x: cx, y: h - 58, width: cw, height: 14)
+            pathF.frame = NSRect(x: cx, y: 26, width: cw, height: 14)
             view.addSubview(pathF)
         }
 
         if session.totalTokens > 0 {
             let tok = "in \(fmtK(session.inputTokens)) · out \(fmtK(session.outputTokens)) · cache \(fmtK(session.cacheTokens))"
             let tokF = lf(tok, size: 10, weight: .regular, color: .quaternaryLabelColor, mono: true)
-            tokF.frame = NSRect(x: cx, y: h - 73, width: cw, height: 14)
+            tokF.frame = NSRect(x: cx, y: 8, width: cw, height: 14)
             view.addSubview(tokF)
         }
 
@@ -439,15 +439,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func dailyRow(_ d: DailyStats) -> NSMenuItem {
-        let h: CGFloat = 28
+        let h: CGFloat = 46
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let sessions  = "\(d.sessions) session\(d.sessions == 1 ? "" : "s")"
-        let messages  = "\(fmtFull(d.messages)) messages"
-        let tools     = "\(fmtFull(d.toolCalls)) tools"
-        let f = lf("\(d.label)  ·  \(sessions)  ·  \(messages)  ·  \(tools)",
-                   size: 11, weight: .regular, color: .tertiaryLabelColor)
-        f.frame = NSRect(x: 14, y: (h - 14) / 2, width: menuW - 28, height: 14)
-        view.addSubview(f)
+        let hdrF = lf("Activity", size: 10, weight: .regular, color: .tertiaryLabelColor)
+        hdrF.frame = NSRect(x: 14, y: 26, width: menuW - 28, height: 13)
+        view.addSubview(hdrF)
+        let sessions = "\(d.sessions) session\(d.sessions == 1 ? "" : "s")"
+        let stats = "\(sessions)  ·  \(fmtFull(d.messages)) msgs  ·  \(fmtFull(d.toolCalls)) tools"
+        let statsF = lf(stats, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
+        statsF.frame = NSRect(x: 14, y: 8, width: menuW - 28, height: 14)
+        view.addSubview(statsF)
         let item = NSMenuItem(); item.view = view; return item
     }
 

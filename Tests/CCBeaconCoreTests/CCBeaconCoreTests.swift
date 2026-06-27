@@ -93,6 +93,30 @@ suite("Session.dirName") {
     expect(s("myproject").dirName,                   "myproject", "bare name")
 }
 
+suite("fmtFull") {
+    expect(fmtFull(0),       "0",         "zero")
+    expect(fmtFull(999),     "999",       "under 1k")
+    expect(fmtFull(1_000),   "1,000",     "1k with comma")
+    expect(fmtFull(2_981),   "2,981",     "thousands")
+    expect(fmtFull(1_000_000), "1,000,000", "million")
+}
+
+suite("dailyLabel") {
+    let fmt = DateFormatter()
+    fmt.dateFormat = "yyyy-MM-dd"
+
+    let today     = fmt.string(from: Date())
+    let yesterday = fmt.string(from: Date(timeIntervalSinceNow: -86400))
+
+    expect(dailyLabel(for: today),     "Today",     "today → Today")
+    expect(dailyLabel(for: yesterday), "Yesterday", "yesterday → Yesterday")
+    expect(dailyLabel(for: "2026-06-24", relativeTo: Date(timeIntervalSinceNow: 86400 * 5)),
+           "Jun 24", "older date → MMM d")
+    expect(dailyLabel(for: "2026-01-01", relativeTo: Date(timeIntervalSinceNow: 86400 * 30)),
+           "Jan 1",  "Jan 1")
+    expect(dailyLabel(for: "bad-date"),  "bad-date", "unparseable → passthrough")
+}
+
 // MARK: - Summary
 
 print("\n" + String(repeating: "─", count: 40))

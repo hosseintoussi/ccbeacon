@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.0.6] - 2026-06-27
+
+### Changed
+- Activity row redesigned: "Activity" header above a stats line (`N sessions · N msgs · N tools`), no date prefix — always shows the most recent day's data
+- Consistent vertical spacing throughout the menu — session rows use uniform 4px gaps between all four lines; header and activity row balanced to match
+- `fmtFull` pinned to `en_US` locale so number formatting is consistent regardless of system locale
+
+### Added
+- Tests for `fmtFull` and `dailyLabel` (48 total)
+
 ## [2.0.5] - 2026-06-27
 
 ### Fixed
