@@ -3,8 +3,8 @@ import Darwin
 
 // MARK: - Paths
 
-public let sessionsDir = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-sessions")
-public let dailyFile   = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-daily.json")
+public let sessionsDir  = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-sessions")
+public let statsCacheFile = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/stats-cache.json")
 
 // MARK: - Token cache
 
@@ -89,18 +89,12 @@ public struct Session {
 }
 
 public struct DailyStats {
-    public let totalTokens: Int
-    public let inputTokens: Int
-    public let outputTokens: Int
-    public let cacheTokens: Int
-    public let totalCost: Double
     public let sessions: Int
+    public let messages: Int
+    public let toolCalls: Int
 
-    public init(totalTokens: Int, inputTokens: Int, outputTokens: Int, cacheTokens: Int,
-                totalCost: Double, sessions: Int) {
-        self.totalTokens = totalTokens; self.inputTokens = inputTokens
-        self.outputTokens = outputTokens; self.cacheTokens = cacheTokens
-        self.totalCost = totalCost; self.sessions = sessions
+    public init(sessions: Int, messages: Int, toolCalls: Int) {
+        self.sessions = sessions; self.messages = messages; self.toolCalls = toolCalls
     }
 }
 
@@ -205,20 +199,19 @@ public func loadSessions() -> [Session] {
 }
 
 public func loadDailyStats() -> DailyStats? {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: dailyFile)),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: statsCacheFile)),
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let activity = json["dailyActivity"] as? [[String: Any]]
     else { return nil }
 
     let today = _dateFmt.string(from: Date())
-    guard (json["date"] as? String) == today else { return nil }
+    guard let entry = activity.last(where: { ($0["date"] as? String) == today })
+    else { return nil }
 
     return DailyStats(
-        totalTokens:  json["total_tokens"]  as? Int    ?? 0,
-        inputTokens:  json["input_tokens"]  as? Int    ?? 0,
-        outputTokens: json["output_tokens"] as? Int    ?? 0,
-        cacheTokens:  json["cache_tokens"]  as? Int    ?? 0,
-        totalCost:    json["total_cost"]    as? Double ?? 0,
-        sessions:     json["sessions"]      as? Int    ?? 0
+        sessions:  entry["sessionCount"]  as? Int ?? 0,
+        messages:  entry["messageCount"]  as? Int ?? 0,
+        toolCalls: entry["toolCallCount"] as? Int ?? 0
     )
 }
 

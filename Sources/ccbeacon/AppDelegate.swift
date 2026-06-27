@@ -439,16 +439,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func dailyRow(_ d: DailyStats) -> NSMenuItem {
-        let h: CGFloat = 44
+        let h: CGFloat = 28
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let leftF = lf("Today · \(d.sessions) session\(d.sessions == 1 ? "" : "s")",
-                       size: 11.5, weight: .regular, color: .secondaryLabelColor)
-        leftF.frame = NSRect(x: 14, y: h - 22, width: menuW - 28, height: 16)
-        view.addSubview(leftF)
-        let tok = "in \(fmtK(d.inputTokens)) · out \(fmtK(d.outputTokens)) · cache \(fmtK(d.cacheTokens))"
-        let tokF = lf(tok, size: 10.5, weight: .regular, color: .tertiaryLabelColor, mono: true)
-        tokF.frame = NSRect(x: 14, y: h - 38, width: menuW - 28, height: 15)
-        view.addSubview(tokF)
+        let sessions  = "\(d.sessions) session\(d.sessions == 1 ? "" : "s")"
+        let messages  = "\(fmtFull(d.messages)) messages"
+        let tools     = "\(fmtFull(d.toolCalls)) tools"
+        let f = lf("Today  ·  \(sessions)  ·  \(messages)  ·  \(tools)",
+                   size: 11, weight: .regular, color: .tertiaryLabelColor)
+        f.frame = NSRect(x: 14, y: (h - 14) / 2, width: menuW - 28, height: 14)
+        view.addSubview(f)
         let item = NSMenuItem(); item.view = view; return item
     }
 

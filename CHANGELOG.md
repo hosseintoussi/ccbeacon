@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.3] - 2026-06-27
+
+### Changed
+- Daily stats row now reads from Claude Code's own `~/.claude/stats-cache.json` and shows sessions, messages, and tool calls for today — no more homegrown token accounting
+- Removed token-counting transcript parsing from the Stop hook; hook script is significantly simpler
+
 ## [2.0.2] - 2026-06-26
 
 ### Fixed

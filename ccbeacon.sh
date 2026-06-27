@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Reflect Claude Code state: iTerm2 tab color + minimal session state file.
-# Token parsing happens in the notifier app (cached by transcript mtime).
-# Daily totals are updated here on Stop only (once per session).
+# Reflect Claude Code state: iTerm2 tab color + session state file.
 state="${1:-}"
 TTY=/dev/tty
 SESSIONS_DIR="$HOME/.claude/cc-sessions"
-DAILY_FILE="$HOME/.claude/cc-daily.json"
 ts=$(date +%s)
 
 set_tab() {
@@ -110,54 +107,6 @@ with open(lock_path, 'w') as lf:
                        'claude_pid': claude_pid, 'tty': tty_device,
                        'terminal': terminal_app}, f)
 
-# Daily totals: parse transcript once at Stop to avoid doing it on every prompt
-if state == 'done':
-    from datetime import date
-    input_t = output_t = cache_c = cache_r = 0
-    if transcript_path and os.path.exists(transcript_path):
-        try:
-            with open(transcript_path) as f:
-                for line in f:
-                    try:
-                        e = json.loads(line)
-                        if e.get('type') == 'assistant':
-                            u = e.get('message', {}).get('usage', {})
-                            input_t += u.get('input_tokens', 0)
-                            output_t += u.get('output_tokens', 0)
-                            cache_c  += u.get('cache_creation_input_tokens', 0)
-                            cache_r  += u.get('cache_read_input_tokens', 0)
-                    except Exception:
-                        continue
-        except Exception:
-            pass
-
-    total = input_t + output_t + cache_c + cache_r
-    cost  = hook.get('total_cost_usd', 0.0)
-    today = date.today().isoformat()
-
-    try:
-        with open('$DAILY_FILE') as f:
-            daily = json.load(f)
-    except Exception:
-        daily = {}
-
-    if daily.get('date') != today:
-        daily = {'date': today, 'total_tokens': 0, 'total_cost': 0.0,
-                 'input_tokens': 0, 'output_tokens': 0, 'cache_tokens': 0,
-                 'sessions': 0, 'counted': []}
-
-    if session_id not in daily.get('counted', []):
-        daily['total_tokens']  = daily.get('total_tokens', 0)  + total
-        daily['input_tokens']  = daily.get('input_tokens', 0)  + input_t
-        daily['output_tokens'] = daily.get('output_tokens', 0) + output_t
-        daily['cache_tokens']  = daily.get('cache_tokens', 0)  + cache_c + cache_r
-        daily['total_cost']    = daily.get('total_cost', 0.0)  + cost
-        daily['sessions']      = daily.get('sessions', 0)      + 1
-        daily.setdefault('counted', []).append(session_id)
-        daily['counted'] = daily['counted'][-500:]
-
-    with open('$DAILY_FILE', 'w') as f:
-        json.dump(daily, f)
 " 2>/dev/null
 
 case "$state" in
