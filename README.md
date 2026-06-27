@@ -109,7 +109,8 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "SessionStart":    [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh idle"    }] }],
     "UserPromptSubmit":[{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
-    "Notification":    [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
+    "Notification":    [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
+                        { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
     "Stop":            [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
   }
 }
@@ -126,13 +127,14 @@ The hook script (`ccbeacon.sh`) is called by Claude Code on four events:
 | `SessionStart` | — | `idle` |
 | `UserPromptSubmit` | — | `working` |
 | `Notification` | `permission_prompt` | `waiting` |
+| `Notification` | `elicitation_dialog` | `waiting` |
 | `Stop` | — | `done` |
 
 Each call writes a small JSON file to `~/.claude/cc-sessions/` including the session's PID, TTY device, and terminal app. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
 
 Sessions are kept alive as long as their Claude process is running (detected via `kill(pid, 0)`). When a session is closed, it disappears from the menu immediately — no stale entries.
 
-The `Notification` hook uses `matcher: "permission_prompt"` so only genuine tool-permission prompts trigger the amber "needs input" state — not recap messages or other idle notifications.
+Two `Notification` matchers trigger the amber "needs input" state: `permission_prompt` (tool approval dialogs) and `elicitation_dialog` (option/question UI rendered by Claude). Other notification types are ignored.
 
 A `flock`-based exclusive lock in the hook script prevents a race condition where a `Notification` hook firing mid-run could overwrite a `Stop` hook running at the same moment.
 
