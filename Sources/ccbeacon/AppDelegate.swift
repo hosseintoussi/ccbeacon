@@ -444,7 +444,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let sessions  = "\(d.sessions) session\(d.sessions == 1 ? "" : "s")"
         let messages  = "\(fmtFull(d.messages)) messages"
         let tools     = "\(fmtFull(d.toolCalls)) tools"
-        let f = lf("Today  ·  \(sessions)  ·  \(messages)  ·  \(tools)",
+        let f = lf("\(d.label)  ·  \(sessions)  ·  \(messages)  ·  \(tools)",
                    size: 11, weight: .regular, color: .tertiaryLabelColor)
         f.frame = NSRect(x: 14, y: (h - 14) / 2, width: menuW - 28, height: 14)
         view.addSubview(f)

@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.5] - 2026-06-27
+
+### Fixed
+- Daily stats row now always shows the most recent available entry instead of hiding when today has no data yet — labeled "Today", "Yesterday", or the date
+
 ## [2.0.4] - 2026-06-27
 
 ### Added

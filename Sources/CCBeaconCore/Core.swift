@@ -89,12 +89,14 @@ public struct Session {
 }
 
 public struct DailyStats {
+    public let label: String
     public let sessions: Int
     public let messages: Int
     public let toolCalls: Int
 
-    public init(sessions: Int, messages: Int, toolCalls: Int) {
-        self.sessions = sessions; self.messages = messages; self.toolCalls = toolCalls
+    public init(label: String, sessions: Int, messages: Int, toolCalls: Int) {
+        self.label = label; self.sessions = sessions
+        self.messages = messages; self.toolCalls = toolCalls
     }
 }
 
@@ -201,14 +203,22 @@ public func loadSessions() -> [Session] {
 public func loadDailyStats() -> DailyStats? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: statsCacheFile)),
           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let activity = json["dailyActivity"] as? [[String: Any]]
+          let activity = json["dailyActivity"] as? [[String: Any]],
+          let entry = activity.last
     else { return nil }
 
-    let today = _dateFmt.string(from: Date())
-    guard let entry = activity.last(where: { ($0["date"] as? String) == today })
-    else { return nil }
+    let entryDate = entry["date"] as? String ?? ""
+    let today     = _dateFmt.string(from: Date())
+    let yesterday = _dateFmt.string(from: Date(timeIntervalSinceNow: -86400))
+    let label: String
+    if entryDate == today           { label = "Today" }
+    else if entryDate == yesterday  { label = "Yesterday" }
+    else if let d = _dateFmt.date(from: entryDate) {
+        let f = DateFormatter(); f.dateFormat = "MMM d"; label = f.string(from: d)
+    } else { label = entryDate }
 
     return DailyStats(
+        label:     label,
         sessions:  entry["sessionCount"]  as? Int ?? 0,
         messages:  entry["messageCount"]  as? Int ?? 0,
         toolCalls: entry["toolCallCount"] as? Int ?? 0
