@@ -111,7 +111,9 @@ Add to `~/.claude/settings.json`:
     "UserPromptSubmit":[{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
     "Notification":    [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
                         { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
-    "Stop":            [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
+    "Stop":            [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
+    "StopFailure":     [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
+    "SessionEnd":      [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
   }
 }
 ```
@@ -120,7 +122,7 @@ Add to `~/.claude/settings.json`:
 
 ## How it works
 
-The hook script (`ccbeacon.sh`) is called by Claude Code on four events:
+The hook script (`ccbeacon.sh`) is called by Claude Code on these events:
 
 | Hook | Matcher | State written |
 |------|---------|--------------|
@@ -129,6 +131,8 @@ The hook script (`ccbeacon.sh`) is called by Claude Code on four events:
 | `Notification` | `permission_prompt` | `waiting` |
 | `Notification` | `elicitation_dialog` | `waiting` |
 | `Stop` | — | `done` |
+| `StopFailure` | — | `done` |
+| `SessionEnd` | — | `done` |
 
 Each call writes a small JSON file to `~/.claude/cc-sessions/` including the session's PID, TTY device, and terminal app. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
 

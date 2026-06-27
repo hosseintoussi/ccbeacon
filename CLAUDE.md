@@ -57,7 +57,9 @@ Add to `~/.claude/settings.json`:
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
     "Notification":     [{ "matcher": "permission_prompt",  "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
                          { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
+    "StopFailure":      [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
   }
 }
 ```
