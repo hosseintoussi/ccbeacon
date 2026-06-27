@@ -1,6 +1,6 @@
 import Foundation
 
-public let appVersion = "2.0.3"
+public let appVersion = "2.0.4"
 
 // Dev if the binary isn't in a standard install location (Homebrew or /usr/local).
 // Uses Bundle.main.executablePath — always the resolved path regardless of how the process was launched.

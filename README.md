@@ -20,7 +20,7 @@ ccbeacon sits in your menu bar and watches all your active Claude Code sessions.
 | Needs your input | `✦ 1` (amber, pulsing) |
 | Just finished | `✦ done` (green, 10s) |
 
-Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported).
+Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported). A summary row at the bottom shows today's session count, messages, and tool calls pulled from Claude Code's own stats.
 
 ---
 
@@ -136,14 +136,16 @@ The hook script (`ccbeacon.sh`) is called by Claude Code on these events:
 
 Each call writes a small JSON file to `~/.claude/cc-sessions/` including the session's PID, TTY device, and terminal app. ccbeacon watches that directory with `DispatchSource` for instant updates — no polling.
 
-Sessions are kept alive as long as their Claude process is running (detected via `kill(pid, 0)`). When a session is closed, it disappears from the menu immediately — no stale entries.
+Sessions are kept alive as long as their Claude process is running (detected via `kill(pid, 0)`). When the process exits — whether from a normal close, `SessionEnd`, or `StopFailure` — the session disappears from the menu immediately.
 
 Two `Notification` matchers trigger the amber "needs input" state: `permission_prompt` (tool approval dialogs) and `elicitation_dialog` (option/question UI rendered by Claude). Other notification types are ignored.
 
 A `flock`-based exclusive lock in the hook script prevents a race condition where a `Notification` hook firing mid-run could overwrite a `Stop` hook running at the same moment.
 
+The daily summary row reads from `~/.claude/stats-cache.json`, which Claude Code maintains automatically — no extra tracking needed.
+
 ---
 
 ## Security
 
-Everything runs locally. The hook script reads session metadata (working directory, transcript path) from Claude Code's hook stdin, writes state to `~/.claude/cc-sessions/`, and reads token counts from your local transcript files. No data leaves your machine.
+Everything runs locally. The hook script reads session metadata from Claude Code's hook stdin and writes state to `~/.claude/cc-sessions/`. The app reads per-session token counts from your local transcript files and daily stats from `~/.claude/stats-cache.json`. No data leaves your machine.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.4] - 2026-06-27
+
+### Added
+- `StopFailure` hook — sessions are marked done immediately when Claude hits an API error or crashes, rather than waiting for PID timeout
+- `SessionEnd` hook — accelerates cleanup when a session exits cleanly, combined with PID liveness for reliability
+
 ## [2.0.3] - 2026-06-27
 
 ### Changed
