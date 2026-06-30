@@ -25,7 +25,7 @@ swift build -c release
 .build/release/ccbeacon &       # runs as dev build — shows "dev" badge in dropdown
 ```
 
-The menu bar button shows `✦` at idle, a Braille spinner + elapsed time while working,
+The menu bar button shows `>_` at idle, a Braille spinner + elapsed time while working,
 and an amber pulsing glyph when a session needs input.
 
 ## Test

@@ -32,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var menuIsOpen = false
     var isMuted = false
     private let menuW: CGFloat = 310
+    private let inputColor = NSColor(red: 247/255, green: 144/255, blue: 9/255, alpha: 1)
     private var spinTick = 0
     private let spinChars = ["⣾","⣽","⣻","⢿","⡿","⣟","⣯","⣷"]
 
@@ -58,6 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         src.setCancelHandler { close(fd) }
         src.resume()
         watcher = src
+
     }
 
     // MARK: Update cycle
@@ -128,8 +130,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if !waiting.isEmpty {
             let alpha: CGFloat = (spinTick % 2 == 0) ? 1.0 : 0.45
-            text  = "✦ \(waiting.count)"
-            color = NSColor.systemOrange.withAlphaComponent(alpha)
+            text  = ">_ \(waiting.count)"
+            color = inputColor.withAlphaComponent(alpha)
         } else if !working.isEmpty {
             if working.count > 1 {
                 text = "\(spinChars[spinTick]) \(working.count) sessions"
@@ -139,10 +141,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             color = NSColor.white.withAlphaComponent(0.75)
         } else if !justDone.isEmpty {
-            text  = "✦ done"
+            text  = ">_ Done"
             color = .systemGreen
         } else {
-            text  = "✦"
+            text  = ">_"
             color = NSColor.white.withAlphaComponent(0.75)
         }
 
@@ -157,17 +159,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let idle   = sessions.filter { $0.state == "idle" }
 
         menu.addItem(headerItem(active: active, idle: idle))
-        menu.addItem(.separator())
 
-        if !sessions.isEmpty {
-            for s in sessions { menu.addItem(sessionRow(s)) }
+        if sessions.isEmpty {
+            menu.addItem(emptyStateItem())
         } else {
-            menu.addItem(emptyRow())
-        }
-
-        if let d = loadDailyStats() {
-            menu.addItem(.separator())
-            menu.addItem(dailyRow(d))
+            for s in sessions { menu.addItem(sessionRow(s)) }
         }
 
         menu.addItem(.separator())
@@ -176,10 +172,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title: isMuted ? "Unmute sounds" : "Mute sounds",
             action: #selector(toggleMute), keyEquivalent: "")
         muteItem.target = self
+        muteItem.image = NSImage(systemSymbolName: isMuted ? "speaker.wave.2" : "speaker.slash",
+                                 accessibilityDescription: nil)
         menu.addItem(muteItem)
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
+        quitItem.image = NSImage(systemSymbolName: "rectangle.portrait.and.arrow.right", accessibilityDescription: nil)
         menu.addItem(quitItem)
 
         menu.delegate   = self
@@ -199,13 +198,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func headerItem(active: [Session], idle: [Session]) -> NSMenuItem {
-        let h: CGFloat = 64
+        let h: CGFloat = 44
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
 
         let titleAttr = NSMutableAttributedString(
-            string: "ccbeacon",
-            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
+            string: ">_",
+            attributes: [.font: NSFont.monospacedSystemFont(ofSize: 13, weight: .bold),
                          .foregroundColor: NSColor.labelColor])
+        titleAttr.append(NSAttributedString(
+            string: "  ccbeacon",
+            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold),
+                         .foregroundColor: NSColor.labelColor]))
         titleAttr.append(NSAttributedString(
             string: "  \(appVersion)",
             attributes: [.font: NSFont.systemFont(ofSize: 11),
@@ -218,7 +221,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let titleF = NSTextField(labelWithString: "")
         titleF.attributedStringValue = titleAttr
-        titleF.frame = NSRect(x: 14, y: h - 26, width: menuW - 28, height: 17)
+        titleF.frame = NSRect(x: 14, y: (h - 17) / 2, width: menuW - 28, height: 17)
         view.addSubview(titleF)
 
         let total = active.count + idle.count
@@ -226,39 +229,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let cntF = lf("\(total) open", size: 11, weight: .regular,
                           color: .tertiaryLabelColor, mono: true)
             cntF.alignment = .right
-            cntF.frame = NSRect(x: menuW - 90, y: h - 26, width: 76, height: 17)
+            cntF.frame = NSRect(x: menuW - 90, y: (h - 17) / 2, width: 76, height: 17)
             view.addSubview(cntF)
-        }
-
-        let running   = active.filter { $0.state == "working" }.count
-        let waiting   = active.filter { $0.state == "waiting" }.count
-        let idleCount = idle.count
-        let attr = NSMutableAttributedString()
-        let bodyA: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11.5),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]
-        func appendDot(_ count: Int, _ label: String, _ col: NSColor) {
-            if attr.length > 0 {
-                attr.append(NSAttributedString(string: "   ", attributes: bodyA))
-            }
-            attr.append(NSAttributedString(string: "● ", attributes: [
-                .font: NSFont.systemFont(ofSize: 11.5), .foregroundColor: col]))
-            attr.append(NSAttributedString(string: "\(count) \(label)", attributes: bodyA))
-        }
-        if running   > 0 { appendDot(running,   "running",     .systemBlue) }
-        if waiting   > 0 { appendDot(waiting,   "needs input", .systemOrange) }
-        if idleCount > 0 { appendDot(idleCount, "idle",        .tertiaryLabelColor) }
-
-        if attr.length > 0 {
-            let sf = NSTextField(labelWithString: "")
-            sf.attributedStringValue = attr
-            sf.frame = NSRect(x: 14, y: 12, width: menuW - 28, height: 16)
-            view.addSubview(sf)
-        } else {
-            let ef = lf("No sessions", size: 11.5, weight: .regular, color: .tertiaryLabelColor)
-            ef.frame = NSRect(x: 14, y: 12, width: menuW - 28, height: 16)
-            view.addSubview(ef)
         }
 
         let item = NSMenuItem(); item.view = view; return item
@@ -269,6 +241,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
         let f = lf(text.uppercased(), size: 10, weight: .semibold, color: .tertiaryLabelColor)
         f.frame = NSRect(x: 14, y: 5, width: menuW - 28, height: 14)
+        view.addSubview(f)
+        let item = NSMenuItem(); item.view = view; return item
+    }
+
+    func emptyStateItem() -> NSMenuItem {
+        let h: CGFloat = 44
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
+        let f = lf("No active sessions", size: 12, weight: .regular, color: .tertiaryLabelColor)
+        f.alignment = .center
+        f.frame = NSRect(x: 14, y: (h - 16) / 2, width: menuW - 28, height: 16)
         view.addSubview(f)
         let item = NSMenuItem(); item.view = view; return item
     }
@@ -340,20 +322,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
         }
 
-        if isInput {
+        let accentColor: NSColor? = isInput ? inputColor : isRunning ? .systemBlue : nil
+        if let color = accentColor {
             let tint = NSView(frame: view.bounds)
             tint.wantsLayer = true
-            tint.layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.10).cgColor
+            tint.layer?.backgroundColor = color.withAlphaComponent(0.10).cgColor
             view.addSubview(tint)
             let stripe = NSView(frame: NSRect(x: 0, y: 0, width: 2.5, height: h))
             stripe.wantsLayer = true
-            stripe.layer?.backgroundColor = NSColor.systemOrange.cgColor
+            stripe.layer?.backgroundColor = color.cgColor
             view.addSubview(stripe)
         }
 
         let iSz: CGFloat = 13; let iX: CGFloat = 14; let iCY = h / 2
         if isRunning {
-            let s = SpinnerView(size: iSz, color: .secondaryLabelColor)
+            let s = SpinnerView(size: iSz, color: .systemBlue)
             s.frame = NSRect(x: iX, y: iCY - iSz/2, width: iSz, height: iSz)
             view.addSubview(s)
         } else if isInput {
@@ -376,23 +359,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         view.addSubview(nameF)
 
         if hasTTY {
-            let pillH: CGFloat = 17
-            let pillW: CGFloat = 54
-            let pill = NSView(frame: NSRect(x: menuW - 14 - pillW, y: h - 26, width: pillW, height: pillH))
-            pill.wantsLayer = true
-            pill.layer?.cornerRadius = pillH / 2
-            pill.layer?.borderWidth = 1
-            pill.layer?.borderColor = NSColor.systemBlue.cgColor
-            let label = lf("open", size: 10, weight: .medium, color: .systemBlue)
-            label.alignment = .center
-            label.frame = NSRect(x: 0, y: 1, width: pillW, height: pillH - 2)
-            pill.addSubview(label)
-            view.addSubview(pill)
+            let iconSz: CGFloat = 13
+            let img = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: nil)
+            let iconV = NSImageView(image: img ?? NSImage())
+            iconV.contentTintColor = accentColor ?? .labelColor
+            iconV.frame = NSRect(x: menuW - 14 - iconSz, y: h - 26 + (16 - iconSz) / 2, width: iconSz, height: iconSz)
+            view.addSubview(iconV)
         } else {
             var rText = fmtElapsed(session.elapsed)
             var rColor = NSColor.secondaryLabelColor
             var rMono  = true
-            var rWeight = NSFont.Weight.regular
+            let rWeight = NSFont.Weight.regular
             if isIdle {
                 rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
             }
@@ -419,7 +396,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if session.totalTokens > 0 {
             let tok = "in \(fmtK(session.inputTokens)) · out \(fmtK(session.outputTokens)) · cache \(fmtK(session.cacheTokens))"
-            let tokF = lf(tok, size: 10, weight: .regular, color: .quaternaryLabelColor, mono: true)
+            let tokF = lf(tok, size: 10, weight: .regular, color: .tertiaryLabelColor, mono: true)
             tokF.frame = NSRect(x: cx, y: 8, width: cw, height: 14)
             view.addSubview(tokF)
         }
@@ -427,29 +404,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem()
         item.view = view
         return item
-    }
-
-    func emptyRow() -> NSMenuItem {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: 36))
-        let f = lf("No active sessions", size: 12, weight: .regular, color: .tertiaryLabelColor)
-        f.alignment = .center
-        f.frame = NSRect(x: 14, y: 10, width: menuW - 28, height: 16)
-        view.addSubview(f)
-        let item = NSMenuItem(); item.view = view; return item
-    }
-
-    func dailyRow(_ d: DailyStats) -> NSMenuItem {
-        let h: CGFloat = 46
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let hdrF = lf("Activity", size: 10, weight: .regular, color: .tertiaryLabelColor)
-        hdrF.frame = NSRect(x: 14, y: 26, width: menuW - 28, height: 13)
-        view.addSubview(hdrF)
-        let sessions = "\(d.sessions) session\(d.sessions == 1 ? "" : "s")"
-        let stats = "\(sessions)  ·  \(fmtFull(d.messages)) msgs  ·  \(fmtFull(d.toolCalls)) tools"
-        let statsF = lf(stats, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
-        statsF.frame = NSRect(x: 14, y: 8, width: menuW - 28, height: 14)
-        view.addSubview(statsF)
-        let item = NSMenuItem(); item.view = view; return item
     }
 
     func menuWillOpen(_ menu: NSMenu) { menuIsOpen = true }

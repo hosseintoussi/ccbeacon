@@ -4,8 +4,6 @@ import Darwin
 // MARK: - Paths
 
 public let sessionsDir  = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-sessions")
-public let statsCacheFile = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/stats-cache.json")
-
 // MARK: - Token cache
 
 private struct TokenSnapshot {
@@ -85,16 +83,6 @@ public struct Session {
         case "idle":    return 1
         default:        return 0
         }
-    }
-}
-
-public struct DailyStats {
-    public let sessions: Int
-    public let messages: Int
-    public let toolCalls: Int
-
-    public init(sessions: Int, messages: Int, toolCalls: Int) {
-        self.sessions = sessions; self.messages = messages; self.toolCalls = toolCalls
     }
 }
 
@@ -198,30 +186,7 @@ public func loadSessions() -> [Session] {
     }.sorted { $0.priority > $1.priority }
 }
 
-public func loadDailyStats() -> DailyStats? {
-    guard let data = try? Data(contentsOf: URL(fileURLWithPath: statsCacheFile)),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let activity = json["dailyActivity"] as? [[String: Any]],
-          let entry = activity.last
-    else { return nil }
-
-    return DailyStats(
-        sessions:  entry["sessionCount"]  as? Int ?? 0,
-        messages:  entry["messageCount"]  as? Int ?? 0,
-        toolCalls: entry["toolCallCount"] as? Int ?? 0
-    )
-}
-
 // MARK: - Formatters
-
-private let _numFmt: NumberFormatter = {
-    let f = NumberFormatter(); f.numberStyle = .decimal
-    f.locale = Locale(identifier: "en_US"); return f
-}()
-
-private let _dateFmt: DateFormatter = {
-    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f
-}()
 
 public func fmtElapsed(_ s: Int) -> String {
     if s < 60   { return "\(s)s" }
@@ -236,22 +201,9 @@ public func fmtK(_ n: Int) -> String {
     return String(format: "%.2fM", Double(n) / 1_000_000)
 }
 
-public func fmtFull(_ n: Int) -> String { _numFmt.string(from: NSNumber(value: n)) ?? "\(n)" }
-
 public func fmtClock(_ s: Int) -> String {
     if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
     return String(format: "%d:%02d", s / 3600, (s % 3600) / 60)
 }
 
 public func cleanModel(_ m: String) -> String { m.hasPrefix("claude-") ? String(m.dropFirst(7)) : m }
-
-public func dailyLabel(for dateString: String, relativeTo now: Date = Date()) -> String {
-    let today     = _dateFmt.string(from: now)
-    let yesterday = _dateFmt.string(from: now.addingTimeInterval(-86400))
-    if dateString == today          { return "Today" }
-    if dateString == yesterday      { return "Yesterday" }
-    if let d = _dateFmt.date(from: dateString) {
-        let f = DateFormatter(); f.dateFormat = "MMM d"; return f.string(from: d)
-    }
-    return dateString
-}

@@ -1,4 +1,4 @@
-# ccbeacon
+# >_ ccbeacon
 
 A macOS menu bar app that tells you when your Claude Code agents need attention — without you having to go look.
 
@@ -14,11 +14,11 @@ ccbeacon sits in your menu bar and watches all your active Claude Code sessions.
 
 | State | Menu bar |
 |-------|----------|
-| No active sessions | `✦` |
+| No active sessions | `>_` |
 | 1 session working | `⣾ 2:14` |
 | Multiple sessions working | `⣾ 3 sessions` |
-| Needs your input | `✦ 1` (amber, pulsing) |
-| Just finished | `✦ done` (green, 10s) |
+| Needs your input | `>_ 1` (amber, pulsing) |
+| Just finished | `>_ done` (green, 10s) |
 
 Click the icon to see a dropdown with per-session details: project name, model, path, and token usage. Each row has an **open** button — click it to jump directly to that terminal pane (iTerm2 and Terminal.app supported). An **Activity** row at the bottom shows the most recent day's session count, messages, and tool calls — pulled from Claude Code's own `stats-cache.json`, no extra tracking needed.
 
