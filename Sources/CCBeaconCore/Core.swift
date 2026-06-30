@@ -194,6 +194,13 @@ public func fmtElapsed(_ s: Int) -> String {
     return "\(s / 3600)h\((s % 3600) / 60)m"
 }
 
+public func fmtBarTime(_ s: Int) -> String {
+    if s < 60    { return "\(s)s" }
+    if s < 3600  { return "\(s / 60)m" }
+    if s < 86400 { return "\(s / 3600)h" }
+    return "\(s / 86400)d"
+}
+
 public func fmtK(_ n: Int) -> String {
     if n == 0        { return "0" }
     if n < 1_000     { return "\(n)" }

@@ -39,6 +39,18 @@ suite("fmtElapsed") {
     expect(fmtElapsed(7260), "2h1m", "7260s → 2h1m")
 }
 
+suite("fmtBarTime") {
+    expect(fmtBarTime(0),      "0s",  "0s")
+    expect(fmtBarTime(59),     "59s", "59s")
+    expect(fmtBarTime(60),     "1m",  "60s → 1m")
+    expect(fmtBarTime(3599),   "59m", "3599s → 59m")
+    expect(fmtBarTime(3600),   "1h",  "3600s → 1h")
+    expect(fmtBarTime(7261),   "2h",  "7261s → 2h")
+    expect(fmtBarTime(86399),  "23h", "86399s → 23h")
+    expect(fmtBarTime(86400),  "1d",  "86400s → 1d")
+    expect(fmtBarTime(172800), "2d",  "172800s → 2d")
+}
+
 suite("fmtClock") {
     expect(fmtClock(0),    "0:00",  "0s")
     expect(fmtClock(47),   "0:47",  "47s")

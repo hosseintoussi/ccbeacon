@@ -137,7 +137,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 text = "\(spinChars[spinTick]) \(working.count) sessions"
             } else {
                 let longest = working.max(by: { $0.elapsed < $1.elapsed })!
-                text = "\(spinChars[spinTick]) \(fmtClock(longest.elapsed))"
+                text = "\(spinChars[spinTick]) \(fmtBarTime(longest.elapsed))"
             }
             color = NSColor.white.withAlphaComponent(0.75)
         } else if !justDone.isEmpty {

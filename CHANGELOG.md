@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.8] - 2026-06-30
+
+### Changed
+- Menu bar elapsed time format changed from `mm:ss` to `Xs` / `Xm` / `Xh` / `Xd` for better readability on long-running sessions
+
 ## [2.0.7] - 2026-06-30
 
 ### Changed
