@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.7] - 2026-06-30
+
+### Changed
+- Menu bar icon changed from `✦` to `>_` across all states (idle, done, waiting)
+- Session rows now show a blue left stripe and tint for running sessions (was only shown for waiting)
+- Running sessions use a blue spinner instead of secondary-label color
+- "Open" pill replaced with a compact `↗` icon for TTY-linked rows
+- Token usage row uses `tertiaryLabelColor` instead of `quaternaryLabelColor` for better readability
+- Menu header shrunk to 44px with vertically centered title
+
+### Added
+- Empty state row "No active sessions" shown when no session files are present
+
+### Removed
+- Daily activity stats row and `DailyStats` / `loadDailyStats` — simplifies the menu
+
 ## [2.0.6] - 2026-06-27
 
 ### Changed
