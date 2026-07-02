@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.1.0] - 2026-07-02
+
+### Changed — dropdown redesign
+- Session rows are now rounded cards with gaps between them instead of full-bleed rows — sessions no longer blur together
+- Readable text hierarchy: path is `secondaryLabelColor` (was tertiary), model moved to the right of the path line, token counts stay as fine print
+- Only the waiting state gets a color wash (amber); working cards are neutral with an accent-colored spinner, idle rows are flat with an "Idle" section label — one loud state instead of three
+- Clickable rows highlight on hover and swap the elapsed time for "open ↗" — the always-visible `↗` icon no longer hides the elapsed time
+- Working spinner uses the system accent color; elapsed times use monospaced digits; paths truncate in the middle so the leaf directory stays visible
+- All card/dot colors resolve at draw time, adapting to light/dark menus (previously `cgColor` snapshots)
+- Cursor handling uses `cursorUpdate` instead of unbalanced push/pop
+
+### Added
+- `ccbeacon --snapshot [dir]` renders the dropdown with fixture sessions to `menu-dark.png` / `menu-light.png` for design review
+
+### Fixed
+- Hook script now writes session files atomically (temp file + rename) — the app can no longer read a half-written file, which caused sessions to flicker out of the menu and re-trigger "needs input" sounds
+- Update timer moved to the `.common` run-loop mode — the menu bar spinner and elapsed times no longer freeze while the dropdown is open
+- Transcript token counts are now parsed incrementally (only appended lines) instead of re-reading the whole transcript every second — large sessions no longer burn CPU on the main thread
+- Menu bar text uses dynamic `labelColor` so it stays readable on light menu bars (was hardcoded white)
+- Session rows keep a stable order across refreshes (priority, then newest first) — equal-priority rows no longer shuffle randomly
+- Quitting a Claude session no longer plays the "finished" chime — `SessionEnd` removes the session file instead of writing `done`
+- `SessionEnd` also resets the iTerm2 tab color (tabs no longer stay green forever)
+- Clicking a session row no longer guesses iTerm2 when the session's terminal is unknown; rows are only clickable for supported terminals (iTerm2, Terminal.app), and the tty is validated before being passed to AppleScript
+- Stale PID detection now also checks the process start time via `sysctl`, so a recycled PID can't keep a dead session alive
+- `.lock` files in `~/.claude/cc-sessions/` are cleaned up instead of accumulating forever
+- Hook script values are passed to Python via the environment instead of shell interpolation (robust against quotes in paths)
+
+### Changed
+- Mute setting persists across restarts
+- Session model shows the most recently used model instead of the first one
+- `osxNotify` renamed to `playSound` — the menu bar icon is the visual notification; sounds are the audio cue
+
+### Removed
+- Dead code: `DoneCircleView`, `fmtClock`, unused `Session.cost` field
+
 ## [2.0.8] - 2026-06-30
 
 ### Changed
