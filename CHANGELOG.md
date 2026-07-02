@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.3] - 2026-07-02
+
+### Changed
+- The open dropdown now updates fully in place: rows swap their view when a session changes state, disappear when a session ends, appear for new sessions, and the header count stays current — previously only elapsed times ticked and state changes waited for reopen
+- Idle dot uses opaque `systemGray` — it was ~25%-alpha `tertiaryLabelColor`, so its visibility varied with whatever was on screen behind the translucent menu
+- Mute item icon shows the current sound state instead of the post-click state
+
+### Removed
+- "IDLE" section label — the gray dot, flat card, and "idle" text already mark idle sessions
+
 ## [2.1.2] - 2026-07-02
 
 (v2.1.1 was tagged but its release build failed; these are its notes, released as v2.1.2.)
