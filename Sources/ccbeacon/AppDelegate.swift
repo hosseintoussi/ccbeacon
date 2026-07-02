@@ -1,28 +1,6 @@
 import Cocoa
 import CCBeaconCore
 
-private final class ClickableRowView: NSView {
-    var onClick: (() -> Void)?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard window != nil else { return }
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeAlways],
-                                       owner: self, userInfo: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) { NSCursor.pointingHand.push() }
-    override func mouseExited(with event: NSEvent)  { NSCursor.pop() }
-
-    override func mouseDown(with event: NSEvent) {
-        NSCursor.pop()
-        onClick?()
-        enclosingMenuItem?.menu?.cancelTracking()
-    }
-}
-
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var statusItem: NSStatusItem!
     var timer: Timer?
@@ -30,8 +8,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var prevStates: [String: String] = [:]
     var pendingWaits: [String: DispatchWorkItem] = [:]
     var menuIsOpen = false
-    var isMuted = false
-    private let menuW: CGFloat = 310
+    var isMuted = UserDefaults.standard.bool(forKey: "muted")
+    let menuW: CGFloat = 310
     private let inputColor = NSColor(red: 247/255, green: 144/255, blue: 9/255, alpha: 1)
     private var spinTick = 0
     private let spinChars = ["⣾","⣽","⣻","⢿","⡿","⣟","⣯","⣷"]
@@ -42,9 +20,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         prevStates = Dictionary(uniqueKeysWithValues: initial.map { ($0.id, $0.state) })
         watchSessionsDir()
         update()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        // .common mode so the timer keeps firing while the status item menu is open —
+        // in .default mode the spinner and elapsed times freeze during menu tracking.
+        let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.update()
         }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     // MARK: File watching
@@ -80,7 +62,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard prev != session.state else { continue }
             switch session.state {
             case "waiting":
-                let sid = session.id; let dir = session.dirName; let tpath = session.transcriptPath
+                let sid = session.id; let tpath = session.transcriptPath
                 pendingWaits[sid]?.cancel()
                 let work = DispatchWorkItem { [weak self] in
                     guard let self = self else { return }
@@ -90,13 +72,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                        let attrs = try? FileManager.default.attributesOfItem(atPath: tpath),
                        let mtime = attrs[.modificationDate] as? Date,
                        Date().timeIntervalSince(mtime) < 5 { return }
-                    self.osxNotify("Claude needs input", body: dir, sound: "Sosumi")
+                    self.playSound("Sosumi")
                 }
                 pendingWaits[sid] = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
             case "idle" where prev == "working" || prev == "waiting":
                 pendingWaits[session.id]?.cancel(); pendingWaits.removeValue(forKey: session.id)
-                osxNotify("Claude finished", body: session.dirName, sound: "Glass")
+                playSound("Glass")
             default:
                 if prev == "waiting" {
                     pendingWaits[session.id]?.cancel(); pendingWaits.removeValue(forKey: session.id)
@@ -109,9 +91,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         prevStates = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.state) })
     }
 
-    func osxNotify(_ title: String, body: String, sound: String) {
+    // Audio cue only — the visual "notification" is the menu bar icon changing state.
+    func playSound(_ name: String) {
         guard !isMuted else { return }
-        NSSound(named: sound)?.play()
+        NSSound(named: name)?.play()
     }
 
     // MARK: Button
@@ -139,13 +122,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let longest = working.max(by: { $0.elapsed < $1.elapsed })!
                 text = "\(spinChars[spinTick]) \(fmtBarTime(longest.elapsed))"
             }
-            color = NSColor.white.withAlphaComponent(0.75)
+            // Dynamic color: resolves against the menu bar's appearance at draw time,
+            // so it stays readable on both dark and light menu bars.
+            color = .labelColor
         } else if !justDone.isEmpty {
             text  = ">_ Done"
             color = .systemGreen
         } else {
             text  = ">_"
-            color = NSColor.white.withAlphaComponent(0.75)
+            color = .labelColor
         }
 
         button.attributedTitle = NSAttributedString(string: text, attributes: [.foregroundColor: color])
@@ -163,7 +148,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if sessions.isEmpty {
             menu.addItem(emptyStateItem())
         } else {
-            for s in sessions { menu.addItem(sessionRow(s)) }
+            // Sessions arrive sorted by priority, so idle rows form a trailing block;
+            // label it when there are active rows above to separate the two groups.
+            var idleLabelInserted = false
+            for s in sessions {
+                if s.state == "idle" && !active.isEmpty && !idleLabelInserted {
+                    menu.addItem(sectionLabel("Idle"))
+                    idleLabelInserted = true
+                }
+                menu.addItem(sessionRow(s))
+            }
         }
 
         menu.addItem(.separator())
@@ -221,15 +215,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let titleF = NSTextField(labelWithString: "")
         titleF.attributedStringValue = titleAttr
-        titleF.frame = NSRect(x: 14, y: (h - 17) / 2, width: menuW - 28, height: 17)
+        titleF.frame = NSRect(x: 18, y: (h - 17) / 2, width: menuW - 36, height: 17)
         view.addSubview(titleF)
 
         let total = active.count + idle.count
         if total > 0 {
             let cntF = lf("\(total) open", size: 11, weight: .regular,
-                          color: .tertiaryLabelColor, mono: true)
+                          color: .secondaryLabelColor, mono: true)
             cntF.alignment = .right
-            cntF.frame = NSRect(x: menuW - 90, y: (h - 17) / 2, width: 76, height: 17)
+            cntF.frame = NSRect(x: menuW - 94, y: (h - 17) / 2, width: 76, height: 17)
             view.addSubview(cntF)
         }
 
@@ -237,10 +231,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func sectionLabel(_ text: String) -> NSMenuItem {
-        let h: CGFloat = 24
+        let h: CGFloat = 22
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let f = lf(text.uppercased(), size: 10, weight: .semibold, color: .tertiaryLabelColor)
-        f.frame = NSRect(x: 14, y: 5, width: menuW - 28, height: 14)
+        let f = lf(text.uppercased(), size: 10, weight: .semibold, color: .secondaryLabelColor)
+        f.frame = NSRect(x: 18, y: 4, width: menuW - 36, height: 14)
         view.addSubview(f)
         let item = NSMenuItem(); item.view = view; return item
     }
@@ -248,25 +242,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func emptyStateItem() -> NSMenuItem {
         let h: CGFloat = 44
         let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let f = lf("No active sessions", size: 12, weight: .regular, color: .tertiaryLabelColor)
+        let f = lf("No active sessions", size: 12, weight: .regular, color: .secondaryLabelColor)
         f.alignment = .center
         f.frame = NSRect(x: 14, y: (h - 16) / 2, width: menuW - 28, height: 16)
         view.addSubview(f)
         let item = NSMenuItem(); item.view = view; return item
     }
 
+    // Only these two can be focused by tty via AppleScript; rows for other terminals
+    // aren't clickable (see canFocus below) rather than guessing and activating the wrong app.
+    static let focusableTerminals: Set<String> = ["iTerm2", "Terminal"]
+
+    func canFocus(_ session: Session) -> Bool {
+        !session.tty.isEmpty && Self.focusableTerminals.contains(session.terminal)
+    }
+
     func focusTerminalSession(tty: String, terminal: String) {
-        let app: String
-        if !terminal.isEmpty {
-            app = terminal
-        } else if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2").isEmpty {
-            app = "iTerm2"
-        } else {
-            app = "Terminal"
-        }
+        // tty is interpolated into AppleScript — accept only a plain device path.
+        guard tty.range(of: #"^/dev/tty[A-Za-z0-9]*$"#, options: .regularExpression) != nil else { return }
 
         let script: String
-        switch app {
+        switch terminal {
         case "iTerm2":
             script = """
             tell application \"iTerm2\"
@@ -285,7 +281,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 end repeat
             end tell
             """
-        default:
+        case "Terminal":
             script = """
             tell application \"Terminal\"
                 repeat with w in windows
@@ -299,6 +295,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 end repeat
             end tell
             """
+        default:
+            return
         }
 
         let proc = Process()
@@ -307,98 +305,92 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? proc.run()
     }
 
+    // Card layout, three lines:
+    //   [state icon] project-name ............ elapsed   ← labelColor / secondary (accent when waiting)
+    //                ~/path/to/project                    ← secondary
+    //                model · in X · out Y · cache Z       ← tertiary mono (the fine print)
+    // Hovering a clickable card highlights it and swaps the time for "open ↗".
     func sessionRow(_ session: Session) -> NSMenuItem {
         let isInput   = session.state == "waiting"
         let isRunning = session.state == "working"
-        let isIdle    = session.state == "idle"
-        let hasTTY    = !session.tty.isEmpty
-        let h: CGFloat = 88
-        let view: NSView
-        if hasTTY {
-            let cv = ClickableRowView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-            cv.onClick = { [weak self] in self?.focusTerminalSession(tty: session.tty, terminal: session.terminal) }
-            view = cv
-        } else {
-            view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        }
+        let h: CGFloat = 72
+        let view = SessionCardView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
+        view.style  = isInput ? .waiting : isRunning ? .working : .idle
+        view.accent = inputColor
 
-        let accentColor: NSColor? = isInput ? inputColor : isRunning ? .systemBlue : nil
-        if let color = accentColor {
-            let tint = NSView(frame: view.bounds)
-            tint.wantsLayer = true
-            tint.layer?.backgroundColor = color.withAlphaComponent(0.10).cgColor
-            view.addSubview(tint)
-            let stripe = NSView(frame: NSRect(x: 0, y: 0, width: 2.5, height: h))
-            stripe.wantsLayer = true
-            stripe.layer?.backgroundColor = color.cgColor
-            view.addSubview(stripe)
-        }
+        // Card insets 6/3, inner padding 12 → content spans 18…292.
+        let textX: CGFloat  = 40
+        let rightW: CGFloat = 76
+        let rightX = menuW - 18 - rightW
+        let nameY: CGFloat  = h - 27
+        let iSz: CGFloat    = 13
+        let iconY = nameY + (16 - iSz) / 2
 
-        let iSz: CGFloat = 13; let iX: CGFloat = 14; let iCY = h / 2
         if isRunning {
-            let s = SpinnerView(size: iSz, color: .systemBlue)
-            s.frame = NSRect(x: iX, y: iCY - iSz/2, width: iSz, height: iSz)
+            let s = SpinnerView(size: iSz, color: .controlAccentColor)
+            s.frame = NSRect(x: 18, y: iconY, width: iSz, height: iSz)
             view.addSubview(s)
         } else if isInput {
-            let d = PulseDotView(size: iSz)
-            d.frame = NSRect(x: iX, y: iCY - iSz/2, width: iSz, height: iSz)
+            let d = PulseDotView(size: 10, color: inputColor)
+            d.frame = NSRect(x: 19.5, y: iconY + 1.5, width: 10, height: 10)
             view.addSubview(d)
-        } else if isIdle {
-            let dot = NSView(frame: NSRect(x: iX + 2, y: iCY - 4, width: 8, height: 8))
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 4
-            dot.layer?.backgroundColor = NSColor.tertiaryLabelColor.cgColor
-            view.addSubview(dot)
+        } else {
+            view.addSubview(IdleDotView(frame: NSRect(x: 21, y: iconY + 3, width: 7, height: 7)))
         }
-
-        let cx: CGFloat = 35; let cw: CGFloat = menuW - cx - 14
 
         let dir = session.dirName.isEmpty ? session.id : session.dirName
-        let nameF = lf(dir, size: 12.5, weight: .semibold, color: .labelColor)
-        nameF.frame = NSRect(x: cx, y: h - 26, width: cw * 0.62, height: 16)
+        let nameF = lf(dir, size: 13, weight: .semibold, color: .labelColor)
+        nameF.frame = NSRect(x: textX, y: nameY, width: rightX - textX - 8, height: 16)
         view.addSubview(nameF)
 
-        if hasTTY {
-            let iconSz: CGFloat = 13
-            let img = NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: nil)
-            let iconV = NSImageView(image: img ?? NSImage())
-            iconV.contentTintColor = accentColor ?? .labelColor
-            iconV.frame = NSRect(x: menuW - 14 - iconSz, y: h - 26 + (16 - iconSz) / 2, width: iconSz, height: iconSz)
-            view.addSubview(iconV)
-        } else {
-            var rText = fmtElapsed(session.elapsed)
-            var rColor = NSColor.secondaryLabelColor
-            var rMono  = true
-            let rWeight = NSFont.Weight.regular
-            if isIdle {
-                rText = "idle"; rColor = .tertiaryLabelColor; rMono = false
-            }
-            let timeF = lf(rText, size: 11, weight: rWeight, color: rColor, mono: rMono)
-            timeF.alignment = .right
-            timeF.frame = NSRect(x: cx + cw * 0.62, y: h - 26, width: cw * 0.38, height: 16)
-            view.addSubview(timeF)
-        }
+        let isIdle = session.state == "idle"
+        let timeF = lf(isIdle ? "idle" : fmtElapsed(session.elapsed),
+                       size: 11, weight: isInput ? .semibold : .regular,
+                       color: isInput ? inputColor : isIdle ? .tertiaryLabelColor : .secondaryLabelColor)
+        timeF.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: isInput ? .semibold : .regular)
+        timeF.alignment = .right
+        timeF.frame = NSRect(x: rightX, y: nameY, width: rightW, height: 16)
+        view.addSubview(timeF)
 
+        // Middle line: path on the left, model on the right.
         let modelStr = cleanModel(session.model)
-        let pathStr  = session.cwd.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-
+        var pathW = menuW - textX - 18
         if !modelStr.isEmpty {
-            let modelF = lf(modelStr, size: 11, weight: .regular, color: .tertiaryLabelColor)
-            modelF.frame = NSRect(x: cx, y: 44, width: cw, height: 14)
+            let modelF = lf(modelStr, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
+            modelF.alignment = .right
+            modelF.frame = NSRect(x: menuW - 18 - 100, y: h - 45, width: 100, height: 14)
             view.addSubview(modelF)
+            pathW -= 108
         }
-
+        let pathStr = session.cwd.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         if !pathStr.isEmpty {
-            let pathF = lf(pathStr, size: 10.5, weight: .regular, color: .tertiaryLabelColor)
-            pathF.frame = NSRect(x: cx, y: 26, width: cw, height: 14)
+            let pathF = lf(pathStr, size: 11, weight: .regular, color: .secondaryLabelColor)
+            pathF.lineBreakMode = .byTruncatingMiddle  // keep the leaf directory visible
+            pathF.frame = NSRect(x: textX, y: h - 45, width: pathW, height: 14)
             view.addSubview(pathF)
         }
 
         if session.totalTokens > 0 {
             let tok = "in \(fmtK(session.inputTokens)) · out \(fmtK(session.outputTokens)) · cache \(fmtK(session.cacheTokens))"
             let tokF = lf(tok, size: 10, weight: .regular, color: .tertiaryLabelColor, mono: true)
-            tokF.frame = NSRect(x: cx, y: 8, width: cw, height: 14)
+            tokF.frame = NSRect(x: textX, y: h - 62, width: menuW - textX - 18, height: 13)
             view.addSubview(tokF)
+        }
+
+        if canFocus(session) {
+            let openF = lf("open ↗", size: 11, weight: .semibold,
+                           color: isInput ? inputColor : .controlAccentColor)
+            openF.alignment = .right
+            openF.frame = timeF.frame
+            openF.isHidden = true
+            view.addSubview(openF)
+            view.onHoverChange = { hovering in
+                timeF.isHidden = hovering
+                openF.isHidden = !hovering
+            }
+            view.onClick = { [weak self] in
+                self?.focusTerminalSession(tty: session.tty, terminal: session.terminal)
+            }
         }
 
         let item = NSMenuItem()
@@ -414,6 +406,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func toggleMute() {
         isMuted = !isMuted
+        UserDefaults.standard.set(isMuted, forKey: "muted")
         buildMenu(loadSessions())
     }
 

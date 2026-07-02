@@ -6,40 +6,74 @@ import Darwin
 public let sessionsDir  = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/cc-sessions")
 // MARK: - Token cache
 
+// Transcripts are append-only JSONL, so totals accumulate and `offset` tracks how many
+// bytes have already been consumed — each call parses only the appended tail instead of
+// re-reading the whole file (which can be tens of MB and runs on every update tick).
 private struct TokenSnapshot {
-    let input: Int, output: Int, cache: Int, model: String, mtime: Date
+    var input = 0, output = 0, cache = 0
+    var model = ""
+    var mtime = Date.distantPast
+    var size: UInt64   = 0  // file size at last parse
+    var offset: UInt64 = 0  // bytes consumed (complete lines only)
 }
 private var tokenCache: [String: TokenSnapshot] = [:]
+
+func evictTokenCache(keeping live: Set<String>) {
+    tokenCache = tokenCache.filter { live.contains($0.key) }
+}
 
 public func readTokens(_ transcriptPath: String) -> (input: Int, output: Int, cache: Int, model: String) {
     guard !transcriptPath.isEmpty,
           let attrs = try? FileManager.default.attributesOfItem(atPath: transcriptPath),
           let mtime = attrs[.modificationDate] as? Date
     else { return (0, 0, 0, "") }
+    let fileSize = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
 
-    if let c = tokenCache[transcriptPath], c.mtime == mtime {
-        return (c.input, c.output, c.cache, c.model)
+    var snap = tokenCache[transcriptPath] ?? TokenSnapshot()
+    if snap.mtime == mtime && snap.size == fileSize {
+        return (snap.input, snap.output, snap.cache, snap.model)
     }
+    if fileSize < snap.offset { snap = TokenSnapshot() }  // truncated/replaced — reparse from scratch
 
-    var i = 0, o = 0, c = 0, model = ""
-    if let text = try? String(contentsOfFile: transcriptPath, encoding: .utf8) {
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data  = line.data(using: .utf8),
-                  let entry = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  (entry["type"] as? String) == "assistant",
-                  let msg   = entry["message"] as? [String: Any],
-                  let usage = msg["usage"]     as? [String: Any]
-            else { continue }
-            i += usage["input_tokens"]                 as? Int ?? 0
-            o += usage["output_tokens"]                as? Int ?? 0
-            c += (usage["cache_creation_input_tokens"] as? Int ?? 0)
-                + (usage["cache_read_input_tokens"]    as? Int ?? 0)
-            if model.isEmpty { model = msg["model"] as? String ?? "" }
+    if let fh = FileHandle(forReadingAtPath: transcriptPath) {
+        defer { try? fh.close() }
+        if (try? fh.seek(toOffset: snap.offset)) != nil, let tail = try? fh.readToEnd() {
+            // Consume complete lines only; a partial trailing line (mid-append) waits for the next read.
+            let nl  = UInt8(ascii: "\n")
+            let end = tail.lastIndex(of: nl).map { tail.index(after: $0) } ?? tail.startIndex
+            let complete = tail[tail.startIndex..<end]
+            for line in complete.split(separator: nl, omittingEmptySubsequences: true) {
+                guard let entry = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                      (entry["type"] as? String) == "assistant",
+                      let msg   = entry["message"] as? [String: Any],
+                      let usage = msg["usage"]     as? [String: Any]
+                else { continue }
+                snap.input  += usage["input_tokens"]                 as? Int ?? 0
+                snap.output += usage["output_tokens"]                as? Int ?? 0
+                snap.cache  += (usage["cache_creation_input_tokens"] as? Int ?? 0)
+                             + (usage["cache_read_input_tokens"]    as? Int ?? 0)
+                if let m = msg["model"] as? String, !m.isEmpty { snap.model = m }
+            }
+            snap.offset += UInt64(complete.count)
         }
     }
+    snap.mtime = mtime
+    snap.size  = fileSize
+    tokenCache[transcriptPath] = snap
+    return (snap.input, snap.output, snap.cache, snap.model)
+}
 
-    tokenCache[transcriptPath] = TokenSnapshot(input: i, output: o, cache: c, model: model, mtime: mtime)
-    return (input: i, output: o, cache: c, model: model)
+// MARK: - Process liveness
+
+// Start time of a process via sysctl, or nil if the process doesn't exist.
+public func processStartTime(_ pid: pid_t) -> TimeInterval? {
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.stride
+    guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0,
+          size >= MemoryLayout<kinfo_proc>.stride else { return nil }
+    let tv = info.kp_proc.p_starttime
+    return TimeInterval(tv.tv_sec) + TimeInterval(tv.tv_usec) / 1_000_000
 }
 
 // MARK: - Models
@@ -54,18 +88,17 @@ public struct Session {
     public let inputTokens: Int
     public let outputTokens: Int
     public let cacheTokens: Int
-    public let cost: Double
     public let model: String
     public let tty: String
     public let terminal: String
 
     public init(id: String, state: String, ts: TimeInterval, cwd: String, transcriptPath: String,
                 totalTokens: Int, inputTokens: Int, outputTokens: Int, cacheTokens: Int,
-                cost: Double, model: String, tty: String = "", terminal: String = "") {
+                model: String, tty: String = "", terminal: String = "") {
         self.id = id; self.state = state; self.ts = ts; self.cwd = cwd
         self.transcriptPath = transcriptPath; self.totalTokens = totalTokens
         self.inputTokens = inputTokens; self.outputTokens = outputTokens
-        self.cacheTokens = cacheTokens; self.cost = cost; self.model = model
+        self.cacheTokens = cacheTokens; self.model = model
         self.tty = tty; self.terminal = terminal
     }
 
@@ -88,14 +121,14 @@ public struct Session {
 
 // MARK: - Loading
 
-public func loadSessions() -> [Session] {
+public func loadSessions(dir: String = sessionsDir) -> [Session] {
     let fm  = FileManager.default
     let now = Date().timeIntervalSince1970
-    guard let files = try? fm.contentsOfDirectory(atPath: sessionsDir) else { return [] }
+    guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
 
-    return files.compactMap { file -> Session? in
+    let sessions = files.compactMap { file -> Session? in
         guard file.hasSuffix(".json") else { return nil }
-        let path = (sessionsDir as NSString).appendingPathComponent(file)
+        let path = (dir as NSString).appendingPathComponent(file)
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
@@ -120,9 +153,17 @@ public func loadSessions() -> [Session] {
 
         let storedPid = json["claude_pid"] as? Int ?? 0
         // kill(pid, 0) returns ESRCH only when the process is truly gone (no permission needed).
-        let killResult = storedPid > 0 ? kill(pid_t(storedPid), 0) : 0
-        let killErrno  = errno
-        let pidDead    = storedPid > 0 && killResult != 0 && killErrno == ESRCH
+        // A live PID can still belong to a *different* process after PID reuse: the real Claude
+        // process always starts before its first hook write, so a start time after this
+        // session's last event (with slack) means the PID was recycled.
+        var pidDead = false
+        if storedPid > 0 {
+            if kill(pid_t(storedPid), 0) != 0 && errno == ESRCH {
+                pidDead = true
+            } else if let started = processStartTime(pid_t(storedPid)), started > ts + 5 {
+                pidDead = true
+            }
+        }
 
         // "done" means Claude finished its last response — the process may still be open.
         // Resolve to "idle" when the PID is alive so open sessions stay visible.
@@ -165,7 +206,11 @@ public func loadSessions() -> [Session] {
             stale = (now - ts) > 14400
         }
 
-        if stale { try? fm.removeItem(atPath: path); return nil }
+        if stale {
+            try? fm.removeItem(atPath: path)
+            try? fm.removeItem(atPath: path + ".lock")  // hook's flock file — don't let these accumulate
+            return nil
+        }
 
         let tok = readTokens(transcriptPath)
         return Session(
@@ -178,12 +223,21 @@ public func loadSessions() -> [Session] {
             inputTokens:    tok.input,
             outputTokens:   tok.output,
             cacheTokens:    tok.cache,
-            cost:           0,
             model:          tok.model,
             tty:            json["tty"]           as? String ?? "",
             terminal:       json["terminal"]      as? String ?? ""
         )
-    }.sorted { $0.priority > $1.priority }
+    }
+
+    evictTokenCache(keeping: Set(sessions.map { $0.transcriptPath }))
+
+    // Secondary keys keep the order stable across rebuilds — Swift's sort is not
+    // stable, and the menu is rebuilt every second.
+    return sessions.sorted {
+        if $0.priority != $1.priority { return $0.priority > $1.priority }
+        if $0.ts       != $1.ts       { return $0.ts       > $1.ts }
+        return $0.id < $1.id
+    }
 }
 
 // MARK: - Formatters
@@ -206,11 +260,6 @@ public func fmtK(_ n: Int) -> String {
     if n < 1_000     { return "\(n)" }
     if n < 1_000_000 { return String(format: "%.1fk", Double(n) / 1_000) }
     return String(format: "%.2fM", Double(n) / 1_000_000)
-}
-
-public func fmtClock(_ s: Int) -> String {
-    if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
-    return String(format: "%d:%02d", s / 3600, (s % 3600) / 60)
 }
 
 public func cleanModel(_ m: String) -> String { m.hasPrefix("claude-") ? String(m.dropFirst(7)) : m }

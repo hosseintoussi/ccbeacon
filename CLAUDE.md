@@ -9,7 +9,8 @@ Sources/
     Version.swift   appVersion constant + isDevBuild detection (path-based)
   ccbeacon/         AppKit menu bar app
     AppDelegate.swift  NSStatusItem, menu building, notifications, file watching
-    Views.swift        SpinnerView, PulseDotView, DoneCircleView (CALayer animations)
+    Views.swift        SessionCardView (card bg + hover/click), SpinnerView, PulseDotView, IdleDotView
+    Snapshot.swift     --snapshot flag: renders the dropdown to PNGs for design review
     main.swift         Entry point
 Tests/
   CCBeaconCoreTests/  Framework-free test runner (no XCTest needed)
@@ -28,6 +29,12 @@ swift build -c release
 The menu bar button shows `>_` at idle, a Braille spinner + elapsed time while working,
 and an amber pulsing glyph when a session needs input.
 
+To review dropdown layout/color changes without clicking through the menu bar:
+
+```sh
+.build/release/ccbeacon --snapshot /tmp   # writes menu-dark.png + menu-light.png
+```
+
 ## Test
 
 ```sh
@@ -35,7 +42,9 @@ swift run CCBeaconTests
 ```
 
 No testing framework required — runs with Command Line Tools alone (no Xcode needed).
-Tests cover: `fmtElapsed`, `fmtClock`, `fmtK`, `cleanModel`, `Session.priority`, `Session.dirName`.
+Tests cover: formatters (`fmtElapsed`, `fmtBarTime`, `fmtK`, `cleanModel`), `Session.priority`,
+`Session.dirName`, `processStartTime`, `readTokens` (incremental parsing, partial lines,
+truncation), and `loadSessions` (state resolution, staleness, PID recycling, sort order).
 
 ## Hook script setup (required to see sessions)
 
@@ -54,6 +63,7 @@ Add to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh idle"    }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
     "Notification":     [{ "matcher": "permission_prompt",  "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
                          { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
@@ -103,14 +113,34 @@ git push
 - **False notification prevention:** `fcntl.flock(LOCK_EX)` in `ccbeacon.sh` serializes
   concurrent hook processes so a `Notification` hook can't overwrite a `Stop` that ran
   simultaneously. The app also debounces "waiting" state for 8 seconds and checks transcript
-  mtime before firing a notification.
+  mtime before playing a sound.
+
+- **Atomic state files:** the hook writes to `<session>.json.tmp` and `os.replace()`s it —
+  the app reads without the lock, so the rename guarantees it never sees a half-written
+  file. The rename also fires the directory watcher, giving instant menu bar updates.
+
+- **SessionEnd deletes the state file** (detected via `hook_event_name` on stdin, so all
+  hook events can pass the same-looking args). A quit session vanishes instead of passing
+  through "done", which would chime "finished" for a session the user killed.
+
+- **PID recycling:** a session is alive only if `kill(pid, 0)` succeeds *and* the process
+  start time (via `sysctl KERN_PROC_PID`) predates the session's last hook event. Claude
+  always starts before its first hook fires, so a later start time means the PID was reused.
+
+- **Incremental transcript parsing:** `readTokens` caches a byte offset per transcript and
+  parses only appended complete lines. Never re-read whole transcripts on the update tick —
+  they can be tens of MB and `update()` runs every second on the main thread.
 
 - **CALayer frame fix:** `SpinnerView` and `PulseDotView` set `sublayer.frame` explicitly
   before adding animations. Without this, `anchorPoint (0.5, 0.5)` maps to position `(0,0)`
   and rotations pivot around the corner instead of the center.
 
-- **Menu bar text color:** `NSColor.labelColor` appears black on light backgrounds.
-  Use `NSColor.white.withAlphaComponent(0.75)` for menu bar button text.
+- **Menu bar text color:** use dynamic system colors (`NSColor.labelColor`) for the status
+  button text so it adapts to light and dark menu bars. Never hardcode white or snapshot a
+  dynamic color's `cgColor` for text — it becomes invisible on a light menu bar.
+
+- **Update timer runs in `.common` run-loop mode** — in `.default` mode timers stop firing
+  while the status item menu is tracking, freezing the spinner and elapsed times.
 
 - **Dev detection:** `isDevBuild` checks `CommandLine.arguments[0]` — any path not under
   `/opt/homebrew` or `/usr/local` is treated as a dev build and shows an orange "dev" badge

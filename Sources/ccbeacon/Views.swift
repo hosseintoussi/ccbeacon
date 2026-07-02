@@ -1,8 +1,61 @@
 import Cocoa
 
+// Rounded "card" behind each session row — the separation between sessions comes from
+// these insets, not from separators. All fills are resolved in draw(_:) so they adapt
+// to the menu's effective appearance (light/dark) automatically.
+final class SessionCardView: NSView {
+    enum Style { case waiting, working, idle }
+
+    var style: Style = .idle
+    var accent: NSColor = .controlAccentColor  // wash color for .waiting
+    var onClick: (() -> Void)? { didSet { updateTrackingAreas() } }
+    var onHoverChange: ((Bool) -> Void)?
+    private var hovered = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        guard onClick != nil else { return }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true;  needsDisplay = true; onHoverChange?(true) }
+    override func mouseExited(with event: NSEvent)  { hovered = false; needsDisplay = true; onHoverChange?(false) }
+    // cursorUpdate (instead of push/pop) lets AppKit restore the arrow cursor itself.
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let onClick else { return }
+        onClick()
+        enclosingMenuItem?.menu?.cancelTracking()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 6, dy: 3), xRadius: 8, yRadius: 8)
+        let fill: NSColor?
+        switch style {
+        case .waiting: fill = accent.withAlphaComponent(hovered ? 0.18 : 0.11)
+        case .working: fill = NSColor.labelColor.withAlphaComponent(hovered ? 0.09 : 0.05)
+        case .idle:    fill = hovered ? NSColor.labelColor.withAlphaComponent(0.07) : nil
+        }
+        if let fill { fill.setFill(); card.fill() }
+    }
+}
+
+// Small status dot for idle rows — drawn (not a layer color snapshot) so it follows
+// the menu's appearance.
+final class IdleDotView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.tertiaryLabelColor.setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+    }
+}
+
 class SpinnerView: NSView {
     private let arcColor: NSColor
-    init(size: CGFloat, color: NSColor = .systemBlue) {
+    init(size: CGFloat, color: NSColor = .controlAccentColor) {
         arcColor = color
         super.init(frame: NSRect(x: 0, y: 0, width: size, height: size))
         wantsLayer = true
@@ -61,26 +114,5 @@ class PulseDotView: NSView {
         fade.keyTimes = [0, 0.5, 1] as [NSNumber]
         fade.duration = 1.4; fade.repeatCount = .infinity
         dot.add(fade, forKey: "fade")
-    }
-}
-
-// Draws a filled green circle with a white checkmark via NSBezierPath — avoids NSTextField
-// vertical-centering issues that leave the ✓ glyph floating off-center.
-class DoneCircleView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.systemGreen.setFill()
-        NSBezierPath(ovalIn: bounds).fill()
-
-        let ck = NSBezierPath()
-        ck.lineWidth = 1.6
-        ck.lineCapStyle  = .round
-        ck.lineJoinStyle = .round
-        let w = bounds.width, h = bounds.height
-        // Checkmark in AppKit y-up coords: left-middle → dip → upper-right
-        ck.move(to: NSPoint(x: w * 0.22, y: h * 0.46))
-        ck.line(to: NSPoint(x: w * 0.42, y: h * 0.26))
-        ck.line(to: NSPoint(x: w * 0.78, y: h * 0.66))
-        NSColor.white.setStroke()
-        ck.stroke()
     }
 }
