@@ -1,6 +1,8 @@
 # Changelog
 
-## [2.1.1] - 2026-07-02
+## [2.1.2] - 2026-07-02
+
+(v2.1.1 was tagged but its release build failed; these are its notes, released as v2.1.2.)
 
 ### Added
 - The app now installs and updates its own Claude Code integration at launch: copies the bundled hook script to `~/.claude/hooks/` when it differs and merges missing hook entries into `~/.claude/settings.json` (existing entries are never touched). Homebrew's `post_install` ran in a sandbox with a fake `$HOME`, so the formula's automatic setup silently never worked — this replaces it

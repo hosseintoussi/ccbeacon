@@ -39,7 +39,9 @@ jobs:
         id: dist
         run: |
           TAG="${{ steps.tag.outputs.name }}"
-          swift build -c release --arch arm64 --arch x86_64
+          # --product: the multi-arch (xcbuild) path compiles every target as a library,
+          # which breaks the top-level-code test runner; only the app binary is needed.
+          swift build -c release --arch arm64 --arch x86_64 --product ccbeacon
           mkdir dist
           cp .build/apple/Products/Release/ccbeacon ccbeacon.sh dist/
           tar -czf "ccbeacon-${TAG}-macos.tar.gz" -C dist ccbeacon ccbeacon.sh
