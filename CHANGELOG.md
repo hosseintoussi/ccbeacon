@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.1] - 2026-07-02
+
+### Added
+- The app now installs and updates its own Claude Code integration at launch: copies the bundled hook script to `~/.claude/hooks/` when it differs and merges missing hook entries into `~/.claude/settings.json` (existing entries are never touched). Homebrew's `post_install` ran in a sandbox with a fake `$HOME`, so the formula's automatic setup silently never worked — this replaces it
+- Releases ship a prebuilt universal (arm64 + x86_64) binary; `brew install` no longer compiles from source
+
+### Changed
+- Dropdown elapsed times update live while the menu is open
+- Hook script latency roughly halved: session PID/tty/terminal are reused from the previous state file while the PID is alive, and the process-tree walk (first event only) takes one `ps` snapshot instead of up to 12 sequential calls
+- Login launch moved to `brew services start ccbeacon` (formula `service` block) instead of a hand-written LaunchAgent
+
+### Fixed
+- Terminal.app detection in the hook — `ps` reports a full executable path, so the old exact-name match never detected it
+
 ## [2.1.0] - 2026-07-02
 
 ### Changed — dropdown redesign

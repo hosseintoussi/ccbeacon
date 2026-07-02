@@ -43,46 +43,81 @@ cwd             = hook.get("cwd", "")
 transcript_path = hook.get("transcript_path", "")
 
 # Walk the process tree to find the Claude PID, hosting terminal app, and TTY device.
-# TTY is read from "ps -o tty=" for the Claude process -- the hook process itself has
+# TTY is read from the ps snapshot for the Claude process -- the hook process itself has
 # all fds redirected (stdin piped, stderr to /dev/null), so its own tty is useless.
+# One ps snapshot for the whole table instead of one call per ancestor. Matching is on
+# the executable basename: comm is a full path on macOS, so the old exact-name check
+# never detected Terminal.app.
 def _find_session_info():
     import subprocess as _sp
+    try:
+        out = _sp.check_output(["ps", "-axo", "pid=,ppid=,tty=,comm="],
+                               stderr=_sp.DEVNULL, text=True)
+    except Exception:
+        return 0, "", ""
+    procs = {}
+    for line in out.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) == 4:
+            try:
+                procs[int(parts[0])] = (int(parts[1]), parts[2], parts[3])
+            except ValueError:
+                pass
     pid = os.getppid()
     seen = set()
     claude_pid = 0
     terminal = ""
     tty_device = ""
     for _ in range(12):
-        if pid <= 1 or pid in seen:
+        if pid <= 1 or pid in seen or pid not in procs:
             break
         seen.add(pid)
-        try:
-            out = _sp.check_output(["ps", "-o", "ppid=,tty=,comm=", "-p", str(pid)],
-                                   stderr=_sp.DEVNULL, text=True).strip()
-            if not out:
-                break
-            parts = out.split(None, 2)
-            ppid  = int(parts[0]) if parts else 0
-            tty   = parts[1] if len(parts) > 1 else ""
-            comm  = (parts[2] if len(parts) > 2 else "").lower().strip()
-            if not claude_pid and ("node" in comm or comm.startswith("claude")):
-                claude_pid = pid
-                if tty and tty != "??":
-                    if tty.startswith("/dev/"):
-                        tty_device = tty
-                    elif tty.startswith("ttys"):
-                        tty_device = "/dev/" + tty
-                    else:
-                        tty_device = "/dev/tty" + tty
-            if not terminal:
-                if "iterm2" in comm:     terminal = "iTerm2"
-                elif comm == "terminal": terminal = "Terminal"
-            pid = ppid
-        except Exception:
-            break
+        ppid, tty, comm = procs[pid]
+        base = comm.rsplit("/", 1)[-1].lower().strip()
+        if not claude_pid and ("node" in base or base.startswith("claude")):
+            claude_pid = pid
+            if tty and tty != "??":
+                if tty.startswith("/dev/"):
+                    tty_device = tty
+                elif tty.startswith("ttys"):
+                    tty_device = "/dev/" + tty
+                else:
+                    tty_device = "/dev/tty" + tty
+        if not terminal:
+            if "iterm2" in base:      terminal = "iTerm2"
+            elif base == "terminal":  terminal = "Terminal"
+        pid = ppid
     return claude_pid, terminal, tty_device
 
-claude_pid, terminal_app, tty_device = _find_session_info()
+# Fast path: the session file already holds pid/tty/terminal from an earlier event.
+# Reuse them while that PID is alive (reads are safe lock-free thanks to atomic
+# writes); a session resumed in a new terminal has a dead stored PID and re-walks.
+_prev = {}
+try:
+    with open(os.path.join(sessions_dir, f"{session_id}.json")) as _f:
+        _prev = json.load(_f)
+except Exception:
+    pass
+
+claude_pid   = int(_prev.get("claude_pid", 0) or 0)
+tty_device   = _prev.get("tty", "")
+terminal_app = _prev.get("terminal", "")
+
+_alive = False
+if claude_pid > 0:
+    try:
+        os.kill(claude_pid, 0)
+        _alive = True
+    except PermissionError:
+        _alive = True
+    except Exception:
+        _alive = False
+
+if not (_alive and tty_device):
+    claude_pid, terminal_app, tty_device = _find_session_info()
+    if claude_pid == 0:   claude_pid   = int(_prev.get("claude_pid", 0) or 0)
+    if not tty_device:    tty_device   = _prev.get("tty", "")
+    if not terminal_app:  terminal_app = _prev.get("terminal", "")
 
 os.makedirs(sessions_dir, exist_ok=True)
 session_file = os.path.join(sessions_dir, f"{session_id}.json")
@@ -104,15 +139,13 @@ with open(lock_path, "w") as lf:
         print("ended")
         sys.exit(0)
 
+    # prev_state must be re-read under the lock: another hook may have written
+    # between the fast-path read above and acquiring the lock.
     skip = False
     prev_state = ""
     try:
         with open(session_file) as f:
-            prev = json.load(f)
-            prev_state = prev.get("state", "")
-            if claude_pid == 0:       claude_pid    = prev.get("claude_pid", 0)
-            if not tty_device:        tty_device    = prev.get("tty", "")
-            if not terminal_app:      terminal_app  = prev.get("terminal", "")
+            prev_state = json.load(f).get("state", "")
     except Exception:
         pass
 

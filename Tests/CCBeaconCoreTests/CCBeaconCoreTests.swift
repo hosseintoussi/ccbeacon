@@ -183,6 +183,39 @@ suite("readTokens") {
     expect(readTokens(dir + "/missing.jsonl").input, 0, "missing file → zeros")
 }
 
+suite("mergedHookSettings") {
+    // Empty settings → all six events added.
+    let fresh = mergedHookSettings([:])
+    expect(fresh != nil, true, "empty settings gains hooks")
+    let freshHooks = fresh?["hooks"] as? [String: Any] ?? [:]
+    expect(freshHooks.keys.sorted().joined(separator: ","),
+           "Notification,SessionEnd,SessionStart,Stop,StopFailure,UserPromptSubmit",
+           "all six events configured")
+    expect((freshHooks["Notification"] as? [[String: Any]])?.count ?? 0, 2,
+           "Notification gets both matchers")
+
+    // Fully configured → nil (no rewrite).
+    expect(mergedHookSettings(fresh!) == nil, true, "complete settings → no change")
+
+    // An event with an existing ccbeacon entry is left untouched; missing events are added.
+    let custom: [String: Any] = [
+        "model": "opus",
+        "hooks": [
+            "Stop": [["hooks": [["type": "command", "command": "/custom/path/ccbeacon.sh done"]]]],
+            "PreToolUse": [["hooks": [["type": "command", "command": "other-tool"]]]],
+        ],
+    ]
+    let merged = mergedHookSettings(custom)
+    let mergedHooks = merged?["hooks"] as? [String: Any] ?? [:]
+    expect((mergedHooks["Stop"] as? [[String: Any]])?.count ?? 0, 1,
+           "existing ccbeacon entry not duplicated")
+    expect(String(describing: mergedHooks["Stop"] ?? "").contains("/custom/path"), true,
+           "user's custom command preserved")
+    expect(mergedHooks["SessionStart"] != nil, true, "missing event added")
+    expect(mergedHooks["PreToolUse"] != nil, true, "unrelated hooks preserved")
+    expect(merged?["model"] as? String ?? "", "opus", "non-hook settings preserved")
+}
+
 suite("loadSessions") {
     let fm       = FileManager.default
     let now      = Date().timeIntervalSince1970

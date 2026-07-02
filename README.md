@@ -31,16 +31,18 @@ Click the icon to see a dropdown with per-session details: project name, model, 
 ```sh
 brew tap hosseintoussi/ccbeacon
 brew install ccbeacon
-ccbeacon &
+brew services start ccbeacon   # starts now and at every login
 ```
 
-The hook script, `~/.claude/settings.json` entries, and login launch are all configured automatically. ccbeacon starts immediately and on every login.
+Installs a prebuilt universal binary — no compile step. On first launch ccbeacon
+installs its hook script and merges the hook entries into `~/.claude/settings.json`
+automatically, and keeps them up to date after every upgrade.
 
 ### Update
 
 ```sh
 brew update && brew upgrade ccbeacon
-pkill ccbeacon; ccbeacon &
+brew services restart ccbeacon
 ```
 
 ### Build from source
@@ -54,13 +56,13 @@ swift build -c release
 .build/release/ccbeacon &
 ```
 
-Then follow the [manual hook setup](#manual-hook-setup) steps below.
+The app configures its Claude Code hooks automatically on first launch (see [Hook setup](#hook-setup)).
 
 ---
 
 ## Launch at login
 
-**Homebrew install:** handled automatically — a LaunchAgent is installed during `brew install` so ccbeacon starts on every login.
+**Homebrew install:** `brew services start ccbeacon` — Homebrew manages the LaunchAgent.
 
 **Built from source:** add a LaunchAgent manually:
 
@@ -88,35 +90,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hosseintoussi.ccbeac
 
 ---
 
-## Manual hook setup
+## Hook setup
 
-Only needed if you built from source. Homebrew handles this automatically.
-
-### 1. Install the hook script
-
-```sh
-mkdir -p ~/.claude/hooks
-cp ccbeacon.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/ccbeacon.sh
-```
-
-### 2. Configure Claude Code hooks
-
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "SessionStart":    [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh idle"    }] }],
-    "UserPromptSubmit":[{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
-    "Notification":    [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
-                        { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
-    "Stop":            [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
-    "StopFailure":     [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
-    "SessionEnd":      [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
-  }
-}
-```
+Automatic for every install method: at launch, ccbeacon installs (and keeps updated)
+`~/.claude/hooks/ccbeacon.sh` and adds any missing hook entries to
+`~/.claude/settings.json`. Existing entries are never modified — if you've customized
+an event's ccbeacon hook, your version wins.
 
 ---
 

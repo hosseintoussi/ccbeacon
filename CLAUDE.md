@@ -48,31 +48,16 @@ truncation), and `loadSessions` (state resolution, staleness, PID recycling, sor
 
 ## Hook script setup (required to see sessions)
 
-**Homebrew install:** handled automatically by `post_install` — hook script copied to
-`~/.claude/hooks/ccbeacon.sh` and entries merged into `~/.claude/settings.json`.
+Automatic: `syncClaudeIntegration()` (`Sources/ccbeacon/Setup.swift`) runs at every
+launch. It copies the bundled `ccbeacon.sh` to `~/.claude/hooks/` when contents differ
+(dev builds resolve it from the repo root, Homebrew builds from the keg's `libexec`)
+and merges any missing hook entries into `~/.claude/settings.json` via
+`mergedHookSettings()` in CCBeaconCore. Events that already contain a ccbeacon entry
+are never modified.
 
-**Dev build:** do it manually:
-
-```sh
-mkdir -p ~/.claude/hooks
-cp ccbeacon.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/ccbeacon.sh
-```
-
-Add to `~/.claude/settings.json`:
-```json
-{
-  "hooks": {
-    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh idle"    }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh working" }] }],
-    "Notification":     [{ "matcher": "permission_prompt",  "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] },
-                         { "matcher": "elicitation_dialog", "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh waiting" }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
-    "StopFailure":      [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/ccbeacon.sh done"    }] }]
-  }
-}
-```
+This lives in the app — NOT in the Homebrew formula — because `post_install` runs in
+Homebrew's sandbox with a fake `$HOME` and cannot write the user's real `~/.claude`.
+Note: launching a dev build overwrites the user-installed hook with the repo version.
 
 ## Releasing a new version
 
@@ -89,8 +74,9 @@ The release workflow (`.github/workflows/release.yml`) is triggered automaticall
 passes on the pushed commit. It will:
 - Detect the version tag on that commit
 - Extract the matching `## [X.Y.Z]` section from `CHANGELOG.md` as the release body
-- Create the GitHub release
-- Update the SHA256 in the Homebrew tap formula
+- Build a universal (arm64 + x86_64) binary and attach `ccbeacon-vX.Y.Z-macos.tar.gz`
+  (binary + hook script) to the GitHub release
+- Point the Homebrew tap formula at the binary asset and update its SHA256
 
 **If CI fails, the release will not run.**
 

@@ -34,12 +34,24 @@ jobs:
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
+      - name: Build universal binary
+        if: steps.tag.outputs.name != ''
+        id: dist
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          swift build -c release --arch arm64 --arch x86_64
+          mkdir dist
+          cp .build/apple/Products/Release/ccbeacon ccbeacon.sh dist/
+          tar -czf "ccbeacon-${TAG}-macos.tar.gz" -C dist ccbeacon ccbeacon.sh
+          echo "sha=$(shasum -a 256 ccbeacon-${TAG}-macos.tar.gz | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         if: steps.tag.outputs.name != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           body: ${{ steps.changelog.outputs.notes }}
+          files: ccbeacon-*.tar.gz
 
       - name: Bump Homebrew formula
         if: steps.tag.outputs.name != ''
@@ -47,8 +59,8 @@ jobs:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.name }}"
-          TARBALL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
-          SHA256=$(curl -sL "$TARBALL" | shasum -a 256 | awk '{print $1}')
+          TARBALL="https://github.com/${{ github.repository }}/releases/download/${TAG}/ccbeacon-${TAG}-macos.tar.gz"
+          SHA256="${{ steps.dist.outputs.sha }}"
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/hosseintoussi/homebrew-ccbeacon.git" /tmp/tap
           cd /tmp/tap

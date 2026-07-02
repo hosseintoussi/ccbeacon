@@ -9,12 +9,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var pendingWaits: [String: DispatchWorkItem] = [:]
     var menuIsOpen = false
     var isMuted = UserDefaults.standard.bool(forKey: "muted")
+    // Elapsed-time labels of the currently built menu, by session id — updated in
+    // place each tick while the menu is open (rebuilding would close the menu).
+    var liveTimeLabels: [String: NSTextField] = [:]
     let menuW: CGFloat = 310
     private let inputColor = NSColor(red: 247/255, green: 144/255, blue: 9/255, alpha: 1)
     private var spinTick = 0
     private let spinChars = ["⣾","⣽","⣻","⢿","⡿","⣟","⣯","⣷"]
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        syncClaudeIntegration()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let initial = loadSessions()
         prevStates = Dictionary(uniqueKeysWithValues: initial.map { ($0.id, $0.state) })
@@ -50,7 +54,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let sessions = loadSessions()
         fireNotifications(sessions)
         updateButton(sessions)
-        if !menuIsOpen { buildMenu(sessions) }
+        if menuIsOpen {
+            for s in sessions where s.state == "working" || s.state == "waiting" {
+                liveTimeLabels[s.id]?.stringValue = fmtElapsed(s.elapsed)
+            }
+        } else {
+            buildMenu(sessions)
+        }
     }
 
     // MARK: Notifications
@@ -139,6 +149,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Menu
 
     func buildMenu(_ sessions: [Session]) {
+        liveTimeLabels.removeAll()
         let menu   = NSMenu()
         let active = sessions.filter { $0.state == "working" || $0.state == "waiting" }
         let idle   = sessions.filter { $0.state == "idle" }
@@ -351,6 +362,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timeF.alignment = .right
         timeF.frame = NSRect(x: rightX, y: nameY, width: rightW, height: 16)
         view.addSubview(timeF)
+        if !isIdle { liveTimeLabels[session.id] = timeF }
 
         // Middle line: path on the left, model on the right.
         let modelStr = cleanModel(session.model)
