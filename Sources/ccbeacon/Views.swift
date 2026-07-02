@@ -45,10 +45,12 @@ final class SessionCardView: NSView {
 }
 
 // Small status dot for idle rows — drawn (not a layer color snapshot) so it follows
-// the menu's appearance.
+// the menu's appearance. Must be an OPAQUE color: translucent colors (the label-color
+// family) composite against the menu's vibrancy material, so the dot's visibility
+// would vary with whatever is on screen behind the menu at that row.
 final class IdleDotView: NSView {
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.tertiaryLabelColor.setFill()
+        NSColor.systemGray.setFill()
         NSBezierPath(ovalIn: bounds).fill()
     }
 }
