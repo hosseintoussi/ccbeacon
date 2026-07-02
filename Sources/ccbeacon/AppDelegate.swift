@@ -159,16 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if sessions.isEmpty {
             menu.addItem(emptyStateItem())
         } else {
-            // Sessions arrive sorted by priority, so idle rows form a trailing block;
-            // label it when there are active rows above to separate the two groups.
-            var idleLabelInserted = false
-            for s in sessions {
-                if s.state == "idle" && !active.isEmpty && !idleLabelInserted {
-                    menu.addItem(sectionLabel("Idle"))
-                    idleLabelInserted = true
-                }
-                menu.addItem(sessionRow(s))
-            }
+            for s in sessions { menu.addItem(sessionRow(s)) }
         }
 
         menu.addItem(.separator())
@@ -238,15 +229,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             view.addSubview(cntF)
         }
 
-        let item = NSMenuItem(); item.view = view; return item
-    }
-
-    func sectionLabel(_ text: String) -> NSMenuItem {
-        let h: CGFloat = 22
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuW, height: h))
-        let f = lf(text.uppercased(), size: 10, weight: .semibold, color: .secondaryLabelColor)
-        f.frame = NSRect(x: 18, y: 4, width: menuW - 36, height: 14)
-        view.addSubview(f)
         let item = NSMenuItem(); item.view = view; return item
     }
 

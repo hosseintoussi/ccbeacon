@@ -31,10 +31,7 @@ func renderMenuSnapshots(to dir: String) {
 
     for (suffix, appearanceName) in [("dark", NSAppearance.Name.darkAqua), ("light", .aqua)] {
         var itemViews: [NSView] = [delegate.headerItem(active: active, idle: idle).view!]
-        for s in sessions {
-            if s.state == "idle" { itemViews.append(delegate.sectionLabel("Idle").view!) }
-            itemViews.append(delegate.sessionRow(s).view!)
-        }
+        for s in sessions { itemViews.append(delegate.sessionRow(s).view!) }
 
         let width  = delegate.menuW
         let height = itemViews.reduce(CGFloat(16)) { $0 + $1.frame.height }
