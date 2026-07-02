@@ -9,9 +9,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var pendingWaits: [String: DispatchWorkItem] = [:]
     var menuIsOpen = false
     var isMuted = UserDefaults.standard.bool(forKey: "muted")
-    // Elapsed-time labels of the currently built menu, by session id — updated in
-    // place each tick while the menu is open (rebuilding would close the menu).
+    // Refs into the currently built menu so it can be mutated in place while open —
+    // replacing statusItem.menu would close it, but NSMenu allows live item changes.
     var liveTimeLabels: [String: NSTextField] = [:]
+    var builtMenu: NSMenu?
+    var rowItems:  [String: NSMenuItem] = [:]
+    var rowStates: [String: String] = [:]
+    var headerCountF: NSTextField?
+    var emptyItem: NSMenuItem?
     let menuW: CGFloat = 310
     private let inputColor = NSColor(red: 247/255, green: 144/255, blue: 9/255, alpha: 1)
     private var spinTick = 0
@@ -55,12 +60,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fireNotifications(sessions)
         updateButton(sessions)
         if menuIsOpen {
-            for s in sessions where s.state == "working" || s.state == "waiting" {
-                liveTimeLabels[s.id]?.stringValue = fmtElapsed(s.elapsed)
-            }
+            refreshOpenMenu(sessions)
         } else {
             buildMenu(sessions)
         }
+    }
+
+    // In-place refresh of the open menu: tick elapsed times, swap a row's view when its
+    // session changes state, drop rows for ended sessions, insert rows for new ones.
+    func refreshOpenMenu(_ sessions: [Session]) {
+        guard let menu = builtMenu else { return }
+        let ids = Set(sessions.map { $0.id })
+
+        for (id, item) in rowItems where !ids.contains(id) {
+            if menu.items.contains(item) { menu.removeItem(item) }
+            rowItems.removeValue(forKey: id)
+            rowStates.removeValue(forKey: id)
+            liveTimeLabels.removeValue(forKey: id)
+        }
+
+        if !sessions.isEmpty, let empty = emptyItem, menu.items.contains(empty) {
+            menu.removeItem(empty)
+            emptyItem = nil
+        }
+
+        for (idx, s) in sessions.enumerated() {
+            if let item = rowItems[s.id] {
+                if rowStates[s.id] != s.state {
+                    item.view = sessionRow(s).view  // rebuild this row for its new state
+                    rowStates[s.id] = s.state
+                } else if s.state == "working" || s.state == "waiting" {
+                    liveTimeLabels[s.id]?.stringValue = fmtElapsed(s.elapsed)
+                }
+            } else {
+                let item = sessionRow(s)
+                menu.insertItem(item, at: min(1 + idx, max(menu.items.count - 3, 1)))
+                rowItems[s.id] = item
+                rowStates[s.id] = s.state
+            }
+        }
+
+        headerCountF?.stringValue = "\(sessions.count) open"
     }
 
     // MARK: Notifications
@@ -150,6 +190,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func buildMenu(_ sessions: [Session]) {
         liveTimeLabels.removeAll()
+        rowItems.removeAll()
+        rowStates.removeAll()
+        headerCountF = nil
+        emptyItem    = nil
         let menu   = NSMenu()
         let active = sessions.filter { $0.state == "working" || $0.state == "waiting" }
         let idle   = sessions.filter { $0.state == "idle" }
@@ -157,9 +201,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(headerItem(active: active, idle: idle))
 
         if sessions.isEmpty {
-            menu.addItem(emptyStateItem())
+            let empty = emptyStateItem()
+            emptyItem = empty
+            menu.addItem(empty)
         } else {
-            for s in sessions { menu.addItem(sessionRow(s)) }
+            for s in sessions {
+                let item = sessionRow(s)
+                rowItems[s.id]  = item
+                rowStates[s.id] = s.state
+                menu.addItem(item)
+            }
         }
 
         menu.addItem(.separator())
@@ -168,7 +219,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title: isMuted ? "Unmute sounds" : "Mute sounds",
             action: #selector(toggleMute), keyEquivalent: "")
         muteItem.target = self
-        muteItem.image = NSImage(systemSymbolName: isMuted ? "speaker.wave.2" : "speaker.slash",
+        // Icon reflects the current state (sound on/off), the title the action.
+        muteItem.image = NSImage(systemSymbolName: isMuted ? "speaker.slash" : "speaker.wave.2",
                                  accessibilityDescription: nil)
         menu.addItem(muteItem)
 
@@ -178,6 +230,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(quitItem)
 
         menu.delegate   = self
+        builtMenu       = menu
         statusItem.menu = menu
     }
 
@@ -227,6 +280,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             cntF.alignment = .right
             cntF.frame = NSRect(x: menuW - 94, y: (h - 17) / 2, width: 76, height: 17)
             view.addSubview(cntF)
+            headerCountF = cntF
         }
 
         let item = NSMenuItem(); item.view = view; return item
